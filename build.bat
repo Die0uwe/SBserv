@@ -23,7 +23,7 @@ set ISCC="%ProgramFiles(x86)%\Inno Setup 6\ISCC.exe"
 if not exist %ISCC% set ISCC="%ProgramFiles%\Inno Setup 6\ISCC.exe"
 %ISCC% sbserv_installer.iss || goto :fail
 
-echo Klaar: SBserv_Setup_v1.0.exe
+echo Klaar: SBserv_Setup_v1.1.exe
 exit /b 0
 :fail
 echo MISLUKT.

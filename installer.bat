@@ -1,5 +1,5 @@
 @echo off
-REM Maakt alleen de installer (SBserv_Setup_v1.0.exe) van een bestaande sbserv.exe.
+REM Maakt alleen de installer (SBserv_Setup_v1.1.exe) van een bestaande sbserv.exe.
 REM Zet sbserv.exe naast dit bestand of in de map dist\. Vereist: Inno Setup 6.3 of nieuwer.
 setlocal
 cd /d "%~dp0"
@@ -25,4 +25,4 @@ if not exist %ISCC% (
 )
 
 %ISCC% sbserv_installer.iss || (echo MISLUKT. & exit /b 1)
-echo Klaar: SBserv_Setup_v1.0.exe
+echo Klaar: SBserv_Setup_v1.1.exe

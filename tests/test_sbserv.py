@@ -160,12 +160,12 @@ class DashboardTests(unittest.TestCase):
         self.assertIn("nl", j["languages"])
 
     def test_db_read_only_and_injection(self):
-        self.assertEqual(json.loads(self.req("/api/db")[1]), ["logs"])
+        self.assertEqual(json.loads(self.req("/api/db")[1]), ["logs", "users"])
         code, body = self.req("/api/db/logs")
         self.assertEqual(code, 200)
         self.assertEqual(json.loads(body)["columns"], ["id", "message", "timestamp"])
         self.assertEqual(self.req("/api/db/" + urllib.request.quote('logs";DROP TABLE logs;--'))[0], 404)
-        self.assertEqual(json.loads(self.req("/api/db")[1]), ["logs"])
+        self.assertEqual(json.loads(self.req("/api/db")[1]), ["logs", "users"])
 
     def test_settings_validation_and_language(self):
         self.assertEqual(self.req("/api/settings", "POST", {"port": 80})[0], 400)
@@ -218,6 +218,156 @@ class DashboardTests(unittest.TestCase):
         with self.assertRaises(urllib.error.HTTPError):
             urllib.request.urlopen(f"http://127.0.0.1:{port}/api/status")
         self.assertNotIn(b"sbserv-token", urllib.request.urlopen(f"http://127.0.0.1:{port}/").read())
+
+
+class AuthTests(unittest.TestCase):
+    """Gebruikers, wachtwoord-hash en login-API."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.mkdtemp()
+        cls.app = a = load_app(cls.tmp)
+        a.setup_environment()
+        a.t.set("en")
+        a.CTX.cfg = {}
+        a.start_server_with_fallback(a.CTX.server, 18400)
+        a.CTX.admin = a.AdminServer()
+        assert a.CTX.admin.start(18500)
+        cls.pub = f"http://127.0.0.1:{a.CTX.server.port}"
+        cls.adm = f"http://127.0.0.1:{a.CTX.admin.port}"
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.app.CTX.server.stop()
+        cls.app.CTX.admin.stop()
+
+    def setUp(self):
+        self.app.THROTTLE.fails.clear()
+        self.app.CTX.cfg["allow_register"] = False
+        with self.app.db_connect() as c:
+            c.execute("DELETE FROM sessions")
+            c.execute("DELETE FROM users")
+
+    def call(self, base, path, method="GET", body=None, headers=None, token=False):
+        import urllib.error
+        h = {"Content-Type": "application/json"}
+        h.update(headers or {})
+        if token:
+            h["X-SBserv-Token"] = self.app.CTX.admin.token
+        data = json.dumps(body).encode() if body is not None else None
+        r = urllib.request.Request(base + path, data=data, method=method, headers=h)
+        try:
+            with urllib.request.urlopen(r, timeout=5) as resp:
+                return resp.status, self._j(resp.read()), resp.headers
+        except urllib.error.HTTPError as e:
+            return e.code, self._j(e.read()), e.headers
+
+    @staticmethod
+    def _j(raw):
+        try:
+            return json.loads(raw or b"{}")
+        except ValueError:
+            return {}
+
+    def login(self, user="ouwe", pw="geheim1234"):
+        return self.call(self.pub, "/api/auth/login", "POST", {"username": user, "password": pw})
+
+    def test_hash_is_salted_and_verifies(self):
+        a = self.app
+        h1, h2 = a.hash_password("geheim1234"), a.hash_password("geheim1234")
+        self.assertNotEqual(h1, h2)
+        self.assertNotIn("geheim1234", h1)
+        self.assertTrue(a.verify_password("geheim1234", h1))
+        self.assertFalse(a.verify_password("geheim1235", h1))
+        self.assertFalse(a.verify_password("x", "kapot$hash"))
+
+    def test_create_validation(self):
+        a = self.app
+        self.assertEqual(a.create_user("ab", "geheim1234"), (False, "username"))
+        self.assertEqual(a.create_user("bad name!", "geheim1234"), (False, "username"))
+        self.assertEqual(a.create_user("ouwe", "kort"), (False, "password"))
+        self.assertEqual(a.create_user("ouwe", "geheim1234"), (True, None))
+        self.assertEqual(a.create_user("OUWE", "geheim1234"), (False, "exists"))  # niet hoofdlettergevoelig
+
+    def test_login_me_logout(self):
+        self.app.create_user("ouwe", "geheim1234")
+        self.assertEqual(self.call(self.pub, "/api/auth/me")[0], 401)
+        code, j, hd = self.login()
+        self.assertEqual(code, 200)
+        cookie = hd["Set-Cookie"]
+        self.assertIn("HttpOnly", cookie)
+        self.assertIn("SameSite=Lax", cookie)
+        sid = cookie.split(";")[0]
+        code, j, _ = self.call(self.pub, "/api/auth/me", headers={"Cookie": sid})
+        self.assertEqual((code, j["user"]), (200, "ouwe"))
+        self.call(self.pub, "/api/auth/logout", "POST", {}, headers={"Cookie": sid})
+        self.assertEqual(self.call(self.pub, "/api/auth/me", headers={"Cookie": sid})[0], 401)
+
+    def test_wrong_password_unknown_user_same_error(self):
+        self.app.create_user("ouwe", "geheim1234")
+        c1, j1, _ = self.login(pw="fout-wachtwoord")
+        c2, j2, _ = self.login(user="bestaatniet")
+        self.assertEqual((c1, j1), (c2, j2))
+        self.assertEqual(c1, 401)
+
+    def test_lockout_after_five_failures(self):
+        self.app.create_user("ouwe", "geheim1234")
+        for _ in range(5):
+            self.assertEqual(self.login(pw="fout-wachtwoord")[0], 401)
+        self.assertEqual(self.login()[0], 429)  # ook het juiste wachtwoord is nu even geblokkeerd
+
+    def test_disabled_user_and_password_change_end_sessions(self):
+        a = self.app
+        a.create_user("ouwe", "geheim1234")
+        uid = a.list_users()[0]["id"]
+        sid = self.login()[2]["Set-Cookie"].split(";")[0]
+        a.set_user_password(uid, "nieuwwachtwoord")
+        self.assertEqual(self.call(self.pub, "/api/auth/me", headers={"Cookie": sid})[0], 401)
+        self.assertEqual(self.login()[0], 401)
+        self.assertEqual(self.login(pw="nieuwwachtwoord")[0], 200)
+        a.set_user_disabled(uid, True)
+        self.assertEqual(self.login(pw="nieuwwachtwoord")[0], 401)
+
+    def test_csrf_checks(self):
+        self.app.create_user("ouwe", "geheim1234")
+        code = self.call(self.pub, "/api/auth/login", "POST", {"username": "ouwe", "password": "geheim1234"},
+                         headers={"Origin": "http://evil.example"})[0]
+        self.assertEqual(code, 403)
+        code = self.call(self.pub, "/api/auth/login", "POST", {"username": "ouwe", "password": "geheim1234"},
+                         headers={"Content-Type": "text/plain"})[0]
+        self.assertEqual(code, 403)
+
+    def test_register_closed_by_default_then_open(self):
+        body = {"username": "gast", "password": "geheim1234"}
+        self.assertEqual(self.call(self.pub, "/api/auth/register", "POST", body)[0], 403)
+        self.app.CTX.cfg["allow_register"] = True
+        code, j, hd = self.call(self.pub, "/api/auth/register", "POST", body)
+        self.assertEqual((code, j["user"]), (200, "gast"))
+        self.assertIn(self.app.SESSION_COOKIE, hd["Set-Cookie"])
+
+    def test_dashboard_user_management_and_no_hash_leak(self):
+        c, j, _ = self.call(self.adm, "/api/users", "POST", {"username": "ouwe", "password": "geheim1234"}, token=True)
+        self.assertEqual(c, 200)
+        self.assertEqual(self.call(self.adm, "/api/users", "POST", {"username": "ouwe", "password": "geheim1234"}, token=True)[0], 400)
+        self.assertEqual(self.call(self.adm, "/api/users", "POST", {"username": "x", "password": "geheim1234"})[0], 403)  # zonder token
+        rows = self.call(self.adm, "/api/users", token=True)[1]
+        self.assertEqual([r["username"] for r in rows], ["ouwe"])
+        self.assertNotIn("pw_hash", rows[0])
+        db = self.call(self.adm, "/api/db", token=True)[1]
+        self.assertNotIn("sessions", db)
+        users = self.call(self.adm, "/api/db/users", token=True)[1]
+        self.assertTrue(all(r[users["columns"].index("pw_hash")] == "********" for r in users["rows"]))
+        self.assertEqual(self.call(self.adm, "/api/db/sessions", token=True)[0], 404)
+        uid = rows[0]["id"]
+        self.assertEqual(self.call(self.adm, "/api/users/disable", "POST", {"id": uid, "disabled": True}, token=True)[0], 200)
+        self.assertEqual(self.login()[0], 401)
+        self.assertEqual(self.call(self.adm, "/api/users/delete", "POST", {"id": uid}, token=True)[0], 200)
+        self.assertEqual(self.call(self.adm, "/api/users/delete", "POST", {"id": uid}, token=True)[0], 400)
+
+    def test_auth_not_on_admin_and_not_shadowed_by_files(self):
+        self.assertEqual(self.call(self.pub, "/api/auth/nothing")[0], 404)
+        self.assertEqual(self.call(self.pub, "/api/users")[0], 404)  # beheer-API bestaat niet op de publieke site
+        self.assertEqual(self.call(self.pub, "/api/auth/login", "POST", {"username": "a"})[0], 401)
 
 
 if __name__ == "__main__":

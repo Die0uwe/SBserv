@@ -5,12 +5,12 @@
 ;   1. Zet sbserv.exe naast dit bestand (of in de submap dist\).
 ;   2. Open dit bestand in Inno Setup en kies Build > Compile (Ctrl+F9),
 ;      of dubbelklik op installer.bat.
-;   3. Klaar: SBserv_Setup_v1.0.exe staat naast dit bestand.
+;   3. Klaar: SBserv_Setup_v1.1.exe staat naast dit bestand.
 ; Zonder sbserv.exe valt het terug op sbserv.py (dan is Python op de pc nodig).
 ; Optioneel: cloudflared.exe naast dit bestand wordt meegeleverd.
 
 #define MyAppName "SBserv"
-#define MyAppVersion "1.0"
+#define MyAppVersion "1.1"
 #define MyAppPublisher "Scriptspace"
 #define MyAppURL "http://scriptspace.nl"
 

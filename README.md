@@ -9,14 +9,15 @@ SBserv is a portable web server for Windows with a built-in SQLite database, an 
 
 SBserv is een draagbare webserver voor Windows met ingebouwde SQLite-database, een automatische startpagina en een optionele publieke link (Cloudflare Quick Tunnel). Engels en Nederlands zijn ingebouwd; meer talen komen via een vertaal-repository.
 
-## Status / Stand van zaken (v1.0)
+## Status / Stand van zaken (v1.1)
 
 | | EN | NL |
 |---|---|---|
 | Works on Windows | `sbserv.exe` (PyInstaller) starts, serves the site, keeps its SQLite database, and a Cloudflare Quick Tunnel link was created (with a `cloudflared` already present on the PC) | `sbserv.exe` (PyInstaller) start, toont de site, bewaart de SQLite-database en een Cloudflare Quick Tunnel-link is aangemaakt (met een `cloudflared` die al op de pc stond) |
-| Installer | `SBserv_Setup_v1.0.exe` built with Inno Setup | `SBserv_Setup_v1.0.exe` gebouwd met Inno Setup |
+| Installer | `SBserv_Setup_v1.1.exe` built with Inno Setup | `SBserv_Setup_v1.1.exe` gebouwd met Inno Setup |
 | Still to test | Automatic `cloudflared` download on a PC without it, installer in both languages on a clean PC, dashboard window on Windows, GitHub Actions build | Automatische `cloudflared`-download op een pc zonder, installer in beide talen op een schone pc, dashboard-venster op Windows, GitHub Actions-build |
-| Planned | `users` table with hashed passwords + login API + user management in the dashboard (stays on SQLite); translation repository | `users`-tabel met versleutelde wachtwoorden + inlog-API + gebruikersbeheer in het dashboard (blijft SQLite); vertaal-repository |
+| New in 1.1 | Users + login: `users` table (scrypt-hashed passwords), login API for your site, user management in the dashboard, example `login.html` (tested with unit tests, not yet on Windows) | Gebruikers + inloggen: `users`-tabel (wachtwoorden met scrypt), inlog-API voor je site, gebruikersbeheer in het dashboard, voorbeeld `login.html` (met unittests getest, nog niet op Windows) |
+| Planned | Translation repository; optional fixed tunnel address | Vertaal-repository; optioneel vast tunneladres |
 
 ## Features / Functies
 
@@ -26,6 +27,7 @@ SBserv is een draagbare webserver voor Windows met ingebouwde SQLite-database, e
 | Database | SQLite (`database.db`, WAL), logs table ready | SQLite (`database.db`, WAL), logs-tabel klaar |
 | Public link | Cloudflare Quick Tunnel; `cloudflared` is bundled or downloaded and verified automatically | Cloudflare Quick Tunnel; `cloudflared` wordt meegeleverd of automatisch gedownload en gecontroleerd |
 | Dashboard | Own resizable app window (Edge/Chrome app mode) on `127.0.0.1:8081`: status, tunnel on/off, files, database view, settings (port, language, text size) | Eigen verschaalbaar app-venster (Edge/Chrome app-modus) op `127.0.0.1:8081`: status, tunnel aan/uit, bestanden, database, instellingen (poort, taal, tekstgrootte) |
+| Users & login | SQLite `users` table, passwords hashed with scrypt (random salt), sessions in an HttpOnly cookie, lock-out after 5 failed attempts, optional self-registration (off by default). Manage users in the dashboard. | SQLite `users`-tabel, wachtwoorden met scrypt (willekeurige salt), sessies in een HttpOnly-cookie, blokkade na 5 foute pogingen, optioneel zelf registreren (standaard uit). Beheer gebruikers in het dashboard. |
 | Languages | EN / NL, switch in the menu (`[7]`), translations are JSON files | EN / NL, wisselen in het menu (`[7]`), vertalingen zijn JSON-bestanden |
 | Start page | Logo, favicon and bilingual page in `public_html` (never overwrites your files) | Logo, favicon en tweetalige pagina in `public_html` (overschrijft nooit je bestanden) |
 | Installer | Inno Setup, language choice EN/NL, no Python needed on the target PC | Inno Setup, taalkeuze EN/NL, geen Python nodig op de doel-pc |
@@ -63,12 +65,27 @@ Unzip, then double-click / Uitpakken en dubbelklikken op:
 build.bat
 ```
 
-This (1) installs PyInstaller, (2) builds `dist\sbserv.exe` with the logo as icon, (3) fetches `cloudflared.exe`, (4) compiles `sbserv_installer.iss` into `SBserv_Setup_v1.0.exe`.
+This (1) installs PyInstaller, (2) builds `dist\sbserv.exe` with the logo as icon, (3) fetches `cloudflared.exe`, (4) compiles `sbserv_installer.iss` into `SBserv_Setup_v1.1.exe`.
 Without `build.bat` the `.iss` falls back to `sbserv.py` (then Python must be installed on the PC).
 
 **Already have `sbserv.exe`? / Heb je al een `sbserv.exe`?** Put it next to `sbserv_installer.iss` (or in `dist\`), open the `.iss` in Inno Setup and press Ctrl+F9, or double-click `installer.bat`. / Zet hem naast `sbserv_installer.iss` (of in `dist\`), open de `.iss` in Inno Setup en druk Ctrl+F9, of dubbelklik `installer.bat`.
 
 **Option B - nothing to install / Optie B - niets installeren.** GitHub builds it for you: *Actions > Build installer > Run workflow*, then download the `SBserv-installer` artifact. Pushing a tag like `v1.0.0` also publishes it as a Release.
+
+## Users and login / Gebruikers en inloggen
+
+EN: add users in the dashboard (*Users*). Your own pages talk to the public server (same port as the site, so it also works through the tunnel). All calls are JSON:
+
+| Call | What it does |
+|---|---|
+| `POST /api/auth/login` `{"username","password"}` | signs in, sets the `sbserv_session` cookie (HttpOnly, SameSite=Lax, 7 days; `Secure` over the tunnel) |
+| `GET /api/auth/me` | `200 {"ok":true,"user":"name"}` or `401` |
+| `POST /api/auth/logout` | ends the session |
+| `POST /api/auth/register` | only when enabled in the dashboard |
+
+`login.html` in your website folder is a working example. Pages that must be private need a check on `/api/auth/me`; static files in `public_html` stay public. Usernames: 3-32 characters (letters, digits, `_ . -`, not case-sensitive); passwords 8-128 characters. The dashboard never shows password hashes and hides the `sessions` table. Over plain `http://localhost` the cookie is not `Secure`; through the tunnel (https) it is.
+
+NL: voeg gebruikers toe in het dashboard (*Gebruikers*). Je eigen pagina's praten met de publieke server (zelfde poort als de site, dus het werkt ook via de tunnel). Alle aanroepen zijn JSON; zie de tabel hierboven. `login.html` in je websitemap is een werkend voorbeeld. Pagina's die privé moeten zijn, controleren `/api/auth/me`; statische bestanden in `public_html` blijven openbaar. Gebruikersnaam: 3-32 tekens (letters, cijfers, `_ . -`, niet hoofdlettergevoelig); wachtwoord 8-128 tekens. Het dashboard toont nooit wachtwoord-hashes en verbergt de tabel `sessions`.
 
 ## Translations / Vertalingen
 
@@ -101,5 +118,6 @@ NL: de projectmap op de pc (`C:\SERVERS\DIEOUWE-AI\SBwebserv`) is de werkkopie; 
 
 * The dashboard runs on its own port (127.0.0.1 only, per-session token, Host check) and is never part of the tunnel.
 * The server only listens on `127.0.0.1`; only the tunnel makes it reachable from outside, and only while you run it.
+* Login: passwords are never stored in plain text; failed logins are throttled per username and per IP; POSTs must be JSON from the same origin (CSRF); wrong password and unknown user give the same answer. Use the tunnel (https) for real logins, not plain http over the internet.
 * Everything in `public_html` becomes public while the tunnel runs. Do not put secrets there.
 * Downloaded translations are plain JSON text and are validated; no code is executed from them.

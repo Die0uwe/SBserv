@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.1.0 - 2026-10-04
+### Added
+- Users and login (SQLite): `users` and `sessions` tables, scrypt password hashes with random salt (PBKDF2 fallback), session cookie (HttpOnly, SameSite=Lax, Secure over https), login lock-out (5 failures / 5 min per username and IP), CSRF check, optional self-registration (off by default).
+- Public login API: `POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/auth/me`, `POST /api/auth/register`.
+- Dashboard: *Users* screen (add, set password, disable, delete, allow registration); EN/NL strings (147 keys each).
+- Example page `login.html` (EN/NL) placed in `public_html` without overwriting.
+- Database view hides the `sessions` table and masks `pw_hash`.
+- 10 new tests (24 in total).
+
 ## 1.0.0 - 2026-10-04
 First release of SBserv (grown out of the earlier "play_assistant" prototype).
 

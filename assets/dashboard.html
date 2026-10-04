@@ -80,7 +80,7 @@
   .tabs button[aria-pressed="true"]{background:var(--cyan);border-color:var(--cyan);color:var(--abyss);font-weight:700}
   .field{display:grid;gap:.35rem;margin-bottom:1.1rem;max-width:28rem}
   .field label{color:var(--muted);font-size:.9rem}
-  .field input[type=text],.field input[type=number],.field select{background:var(--abyss);border:1px solid var(--seam);border-radius:.5rem;padding:.6rem .75rem}
+  .field input[type=text],.field input[type=password],.field input[type=number],.field select{background:var(--abyss);border:1px solid var(--seam);border-radius:.5rem;padding:.6rem .75rem}
   .field.check{display:flex;gap:.6rem;align-items:center}
   .hint{color:var(--muted);font-size:.85rem}
   .toast{position:fixed;right:1.25rem;bottom:1.25rem;background:var(--plate-2);border:1px solid var(--cyan);border-radius:.6rem;padding:.6rem 1rem;opacity:0;transform:translateY(8px);transition:opacity .2s,transform .2s;pointer-events:none}
@@ -108,6 +108,7 @@
       <button data-go="dash" aria-current="page"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></svg><span data-i="nav_dash"></span></button>
       <button data-go="files"><svg viewBox="0 0 24 24"><path d="M3 7h6l2 2h10v10H3z"/></svg><span data-i="nav_files"></span></button>
       <button data-go="db"><svg viewBox="0 0 24 24"><ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/></svg><span data-i="nav_db"></span></button>
+      <button data-go="users"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6M16 5a3.5 3.5 0 010 6.5M18 14c2.2.6 3.5 2.6 3.5 6"/></svg><span data-i="nav_users"></span></button>
       <button data-go="set"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1"/></svg><span data-i="nav_settings"></span></button>
     </nav>
     <div class="rail-foot">SBserv v<span id="ver"></span></div>
@@ -164,6 +165,22 @@
       </div>
     </section>
 
+    <section id="users" hidden>
+      <h1 data-i="users_title"></h1>
+      <p class="sub" data-i="users_sub"></p>
+      <div class="plate pad">
+        <div class="scroll"><table><thead><tr><th data-i="col_user"></th><th data-i="col_status"></th><th data-i="col_created"></th><th data-i="col_last_login"></th><th></th></tr></thead><tbody id="userbody"></tbody></table></div>
+        <p class="hint" id="userempty" hidden data-i="users_empty"></p>
+      </div>
+      <div class="plate pad" style="margin-top:1rem">
+        <div class="field"><label for="u-name" data-i="user_username"></label><input type="text" id="u-name" maxlength="32" autocomplete="off" spellcheck="false"></div>
+        <div class="field"><label for="u-pass" data-i="user_password"></label><input type="password" id="u-pass" maxlength="128" autocomplete="new-password"></div>
+        <div class="actions"><button class="btn primary" id="u-add" data-i="user_add"></button><button class="btn" id="u-setpw" data-i="user_set_pw"></button></div>
+        <div class="field check" style="margin-top:1rem"><input type="checkbox" id="u-reg"><label for="u-reg" data-i="user_allow_reg"></label></div>
+        <p class="hint" data-i="users_api_hint"></p>
+      </div>
+    </section>
+
     <section id="set" hidden>
       <h1 data-i="set_title"></h1>
       <p class="sub">&nbsp;</p>
@@ -209,6 +226,7 @@
     document.querySelectorAll('main section').forEach(function(s){s.hidden=s.id!==b.dataset.go;});
     if(b.dataset.go==='files')loadFiles();
     if(b.dataset.go==='db')loadDb();
+    if(b.dataset.go==='users')loadUsers();
   };});
 
   /* status rendering */
@@ -298,6 +316,43 @@
       });
     });
   }
+
+  /* users */
+  var USERS=[], armed=null;
+  function loadUsers(){
+    $('u-reg').checked=!!(ST&&ST.allow_register);
+    api('/api/users').then(function(rows){
+      USERS=rows;
+      $('userbody').innerHTML=rows.map(function(u){
+        return '<tr><td>'+esc(u.username)+'</td><td><span class="tag">'+esc(u.disabled?S.user_disabled:S.user_active)+'</span></td><td>'+esc(u.created||'')+'</td><td>'+esc(u.last_login||S.user_never)+'</td><td style="text-align:right">'
+          +'<button class="btn" data-a="dis" data-id="'+u.id+'" data-d="'+(u.disabled?0:1)+'">'+esc(u.disabled?S.user_enable:S.user_disable)+'</button> '
+          +'<button class="btn stop" data-a="del" data-id="'+u.id+'">'+esc(S.user_delete)+'</button></td></tr>';
+      }).join('');
+      $('userempty').hidden=rows.length>0;
+      document.querySelectorAll('#userbody button').forEach(function(b){b.onclick=function(){userAction(b);};});
+    });
+  }
+  function userErr(r){var k='user_err_'+r.error;toast(S[k]||'Error');}
+  function userAction(b){
+    var id=parseInt(b.dataset.id,10);
+    if(b.dataset.a==='dis'){api('/api/users/disable','POST',{id:id,disabled:b.dataset.d==='1'}).then(function(r){r.ok?loadUsers():userErr(r);});return;}
+    if(armed!==id){armed=id;b.textContent=S.user_confirm;setTimeout(function(){if(armed===id){armed=null;b.textContent=S.user_delete;}},3000);return;}
+    armed=null;
+    api('/api/users/delete','POST',{id:id}).then(function(r){if(r.ok){toast(S.user_deleted);loadUsers();}else userErr(r);});
+  }
+  $('u-add').onclick=function(){
+    api('/api/users','POST',{username:$('u-name').value.trim(),password:$('u-pass').value}).then(function(r){
+      if(r.ok){toast(S.user_added);$('u-pass').value='';loadUsers();}else userErr(r);
+    });
+  };
+  $('u-setpw').onclick=function(){
+    var n=$('u-name').value.trim().toLowerCase(),u=USERS.filter(function(x){return x.username.toLowerCase()===n;})[0];
+    if(!u){toast(S.user_err_notfound);return;}
+    api('/api/users/password','POST',{id:u.id,password:$('u-pass').value}).then(function(r){
+      if(r.ok){toast(S.user_pw_changed);$('u-pass').value='';loadUsers();}else userErr(r);
+    });
+  };
+  $('u-reg').onchange=function(){api('/api/settings','POST',{allow_register:$('u-reg').checked}).then(function(r){if(r.ok){toast(S.set_saved);poll();}});};
 
   /* settings */
   function fillSettings(){

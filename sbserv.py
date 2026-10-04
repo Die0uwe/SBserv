@@ -1,5 +1,5 @@
 """
-SBserv 1.0
+SBserv 1.1
 ==========
 Standalone, draagbare webserver met SQLite-database voor Windows.
 Eenvoudig te installeren (Inno Setup) en met een optionele publieke link via een
@@ -17,6 +17,7 @@ Cloudflare Quick Tunnel.
   een schrijfbare map (valt terug op %LOCALAPPDATA%\\SBserv).
 """
 
+import hashlib
 import hmac
 import http.server
 import json
@@ -37,7 +38,7 @@ import urllib.request
 import webbrowser
 
 APP_NAME = "SBserv"
-APP_VERSION = "1.0"
+APP_VERSION = "1.1"
 DEFAULT_PORT = 8080
 DEFAULT_ADMIN_PORT = 8081  # dashboard; alleen 127.0.0.1, wordt NOOIT door de tunnel gedeeld
 HOST = "127.0.0.1"
@@ -159,6 +160,21 @@ def db_init():
             "id INTEGER PRIMARY KEY AUTOINCREMENT, message TEXT, "
             "timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)"
         )
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS users ("
+            "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+            "username TEXT NOT NULL UNIQUE COLLATE NOCASE, "
+            "pw_hash TEXT NOT NULL, "
+            "disabled INTEGER NOT NULL DEFAULT 0, "
+            "created DATETIME DEFAULT CURRENT_TIMESTAMP, "
+            "last_login DATETIME)"
+        )
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS sessions ("
+            "token_hash TEXT PRIMARY KEY, "
+            "user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, "
+            "expires INTEGER NOT NULL)"
+        )
 
 
 def db_log(message):
@@ -183,6 +199,207 @@ def check_db_status():
 
 
 # ----------------------------------------------------------------------------
+# Gebruikers & inloggen (voor je eigen website; SQLite zelf kent geen accounts)
+# ----------------------------------------------------------------------------
+USERNAME_RE = re.compile(r"^[A-Za-z0-9_.\-]{3,32}$")
+PW_MIN, PW_MAX = 8, 128
+SESSION_TTL = 7 * 24 * 3600
+SESSION_COOKIE = "sbserv_session"
+SCRYPT_N, SCRYPT_R, SCRYPT_P = 2 ** 14, 8, 1
+PBKDF2_ITER = 600_000
+
+
+def hash_password(password):
+    """Wachtwoord -> 'scrypt$n$r$p$salt$hash' (of pbkdf2 als scrypt ontbreekt). Nooit leesbaar terug te draaien."""
+    salt = secrets.token_bytes(16)
+    pw = password.encode("utf-8")
+    if hasattr(hashlib, "scrypt"):
+        dk = hashlib.scrypt(pw, salt=salt, n=SCRYPT_N, r=SCRYPT_R, p=SCRYPT_P, dklen=32)
+        return f"scrypt${SCRYPT_N}${SCRYPT_R}${SCRYPT_P}${salt.hex()}${dk.hex()}"
+    dk = hashlib.pbkdf2_hmac("sha256", pw, salt, PBKDF2_ITER, 32)
+    return f"pbkdf2${PBKDF2_ITER}${salt.hex()}${dk.hex()}"
+
+
+def verify_password(password, stored):
+    try:
+        pw = password.encode("utf-8")
+        parts = stored.split("$")
+        if parts[0] == "scrypt" and len(parts) == 6 and hasattr(hashlib, "scrypt"):
+            n, r, p = int(parts[1]), int(parts[2]), int(parts[3])
+            if n > 2 ** 20 or r > 32 or p > 16:
+                return False
+            salt, want = bytes.fromhex(parts[4]), bytes.fromhex(parts[5])
+            dk = hashlib.scrypt(pw, salt=salt, n=n, r=r, p=p, dklen=len(want), maxmem=128 * 1024 * 1024)
+        elif parts[0] == "pbkdf2" and len(parts) == 4:
+            iters = int(parts[1])
+            if iters > 5_000_000:
+                return False
+            salt, want = bytes.fromhex(parts[2]), bytes.fromhex(parts[3])
+            dk = hashlib.pbkdf2_hmac("sha256", pw, salt, iters, len(want))
+        else:
+            return False
+        return hmac.compare_digest(dk, want)
+    except (ValueError, TypeError, OverflowError):
+        return False
+
+
+_DUMMY_HASH = None
+
+
+def _dummy_hash():
+    global _DUMMY_HASH
+    if _DUMMY_HASH is None:
+        _DUMMY_HASH = hash_password(secrets.token_urlsafe(8))
+    return _DUMMY_HASH
+
+
+def _valid_username(name):
+    return isinstance(name, str) and USERNAME_RE.match(name) is not None
+
+
+def _valid_password(pw):
+    return isinstance(pw, str) and PW_MIN <= len(pw) <= PW_MAX
+
+
+def create_user(username, password):
+    """Geeft (ok, foutcode): username / password / exists."""
+    if not _valid_username(username):
+        return False, "username"
+    if not _valid_password(password):
+        return False, "password"
+    try:
+        with db_connect() as conn:
+            conn.execute("INSERT INTO users (username, pw_hash) VALUES (?, ?)",
+                         (username, hash_password(password)))
+    except sqlite3.IntegrityError:
+        return False, "exists"
+    db_log(f"user created: {username}")
+    return True, None
+
+
+def set_user_password(user_id, password):
+    if not _valid_password(password):
+        return False, "password"
+    with db_connect() as conn:
+        cur = conn.execute("UPDATE users SET pw_hash=? WHERE id=?", (hash_password(password), user_id))
+        if cur.rowcount == 0:
+            return False, "notfound"
+        conn.execute("DELETE FROM sessions WHERE user_id=?", (user_id,))  # oude sessies ongeldig
+    db_log(f"user password changed: id {user_id}")
+    return True, None
+
+
+def set_user_disabled(user_id, disabled):
+    with db_connect() as conn:
+        cur = conn.execute("UPDATE users SET disabled=? WHERE id=?", (1 if disabled else 0, user_id))
+        if cur.rowcount == 0:
+            return False, "notfound"
+        if disabled:
+            conn.execute("DELETE FROM sessions WHERE user_id=?", (user_id,))
+    return True, None
+
+
+def delete_user(user_id):
+    with db_connect() as conn:
+        conn.execute("DELETE FROM sessions WHERE user_id=?", (user_id,))
+        cur = conn.execute("DELETE FROM users WHERE id=?", (user_id,))
+        if cur.rowcount == 0:
+            return False, "notfound"
+    db_log(f"user deleted: id {user_id}")
+    return True, None
+
+
+def list_users():
+    now = int(time.time())
+    with db_connect() as conn:
+        rows = conn.execute(
+            "SELECT u.id, u.username, u.disabled, u.created, u.last_login, "
+            "(SELECT COUNT(*) FROM sessions s WHERE s.user_id=u.id AND s.expires>?) "
+            "FROM users u ORDER BY u.username COLLATE NOCASE", (now,)).fetchall()
+    return [{"id": r[0], "username": r[1], "disabled": bool(r[2]), "created": r[3],
+             "last_login": r[4], "sessions": r[5]} for r in rows]
+
+
+def authenticate(username, password):
+    """Controleer inloggegevens. Geeft {'id','username'} of None. Even snel bij onbekende gebruiker."""
+    if not isinstance(username, str) or not isinstance(password, str) or len(password) > PW_MAX:
+        return None
+    with db_connect() as conn:
+        row = conn.execute("SELECT id, username, pw_hash, disabled FROM users WHERE username=?",
+                           (username,)).fetchone()
+    if row is None:
+        verify_password(password, _dummy_hash())  # zelfde rekentijd: verraadt niet of een naam bestaat
+        return None
+    if not verify_password(password, row[2]) or row[3]:
+        return None
+    with db_connect() as conn:
+        conn.execute("UPDATE users SET last_login=CURRENT_TIMESTAMP WHERE id=?", (row[0],))
+    return {"id": row[0], "username": row[1]}
+
+
+def _token_hash(token):
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def create_session(user_id):
+    token = secrets.token_urlsafe(32)
+    now = int(time.time())
+    with db_connect() as conn:
+        conn.execute("DELETE FROM sessions WHERE expires<?", (now,))
+        conn.execute("INSERT INTO sessions (token_hash, user_id, expires) VALUES (?, ?, ?)",
+                     (_token_hash(token), user_id, now + SESSION_TTL))
+    return token
+
+
+def session_user(token):
+    if not token or len(token) > 100:
+        return None
+    with db_connect() as conn:
+        row = conn.execute(
+            "SELECT u.id, u.username FROM sessions s JOIN users u ON u.id=s.user_id "
+            "WHERE s.token_hash=? AND s.expires>? AND u.disabled=0",
+            (_token_hash(token), int(time.time()))).fetchone()
+    return {"id": row[0], "username": row[1]} if row else None
+
+
+def end_session(token):
+    if token:
+        with db_connect() as conn:
+            conn.execute("DELETE FROM sessions WHERE token_hash=?", (_token_hash(token),))
+
+
+class Throttle:
+    """Remt het raden van wachtwoorden: max 5 mislukte pogingen per 5 minuten per sleutel."""
+    LIMIT, WINDOW = 5, 300
+
+    def __init__(self):
+        self.fails = {}
+        self.lock = threading.Lock()
+
+    def blocked(self, *keys):
+        now = time.time()
+        with self.lock:
+            return any(len([x for x in self.fails.get(k, ()) if now - x < self.WINDOW]) >= self.LIMIT
+                       for k in keys)
+
+    def fail(self, *keys):
+        now = time.time()
+        with self.lock:
+            if len(self.fails) > 5000:  # geheugen begrenzen
+                self.fails = {k: v for k, v in self.fails.items() if v and now - v[-1] < self.WINDOW}
+            for k in keys:
+                self.fails[k] = [x for x in self.fails.get(k, ()) if now - x < self.WINDOW] + [now]
+
+    def clear(self, *keys):
+        with self.lock:
+            for k in keys:
+                self.fails.pop(k, None)
+
+
+THROTTLE = Throttle()
+
+
+# ----------------------------------------------------------------------------
 # Startpagina
 # ----------------------------------------------------------------------------
 FALLBACK_INDEX = (
@@ -192,7 +409,7 @@ FALLBACK_INDEX = (
     "<p>Put your files in <code>public_html</code> / Plaats je bestanden in <code>public_html</code>.</p>"
     "</body></html>"
 )
-WEB_ASSETS = ("index.html", "logo.png", "logo_512.png", "favicon.ico", "favicon-32.png", "apple-touch-icon.png")
+WEB_ASSETS = ("index.html", "login.html", "logo.png", "logo_512.png", "favicon.ico", "favicon-32.png", "apple-touch-icon.png")
 
 
 def setup_environment():
@@ -364,6 +581,103 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
 
     def log_message(self, format, *args):  # terminal schoon houden
         return
+
+    # -- Login-API voor je eigen website (/api/auth/*); deze paden gaan altijd voor op bestanden
+    def _auth_json(self, obj, code=200, cookie=None):
+        body = json.dumps(obj, ensure_ascii=False).encode("utf-8")
+        self.send_response(code)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        if cookie:
+            self.send_header("Set-Cookie", cookie)
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _cookie_token(self):
+        for part in (self.headers.get("Cookie") or "").split(";"):
+            k, _, v = part.strip().partition("=")
+            if k == SESSION_COOKIE:
+                return v
+        return ""
+
+    def _cookie(self, token, max_age):
+        c = f"{SESSION_COOKIE}={token}; Path=/; HttpOnly; SameSite=Lax; Max-Age={max_age}"
+        if (self.headers.get("X-Forwarded-Proto") or "").lower() == "https":
+            c += "; Secure"  # via de tunnel (https) alleen over versleutelde verbindingen
+        return c
+
+    def _client_ip(self):
+        return self.headers.get("CF-Connecting-IP") or self.client_address[0]
+
+    def _same_origin(self):
+        """Tegen CSRF: alleen JSON en geen verzoeken van een andere site."""
+        if "application/json" not in (self.headers.get("Content-Type") or "").lower():
+            return False
+        origin = self.headers.get("Origin")
+        if origin:
+            from urllib.parse import urlparse
+            return urlparse(origin).netloc.lower() == (self.headers.get("Host") or "").lower()
+        return True
+
+    def _json_body(self):
+        try:
+            n = int(self.headers.get("Content-Length") or 0)
+            if 0 < n <= 4096:
+                data = json.loads(self.rfile.read(n).decode("utf-8"))
+                return data if isinstance(data, dict) else {}
+        except (ValueError, OSError):
+            pass
+        return {}
+
+    def do_GET(self):
+        path = self.path.split("?", 1)[0]
+        if path == "/api/auth/me":
+            user = session_user(self._cookie_token())
+            if not user:
+                return self._auth_json({"ok": False, "error": "not_logged_in"}, 401)
+            return self._auth_json({"ok": True, "user": user["username"]})
+        if path.startswith("/api/auth/"):
+            return self._auth_json({"ok": False, "error": "not_found"}, 404)
+        return super().do_GET()
+
+    def do_HEAD(self):
+        if self.path.split("?", 1)[0].startswith("/api/auth/"):
+            return self._auth_json({}, 405)
+        return super().do_HEAD()
+
+    def do_POST(self):
+        path = self.path.split("?", 1)[0]
+        if not path.startswith("/api/auth/"):
+            return self._auth_json({"ok": False, "error": "not_found"}, 404)
+        if not self._same_origin():
+            return self._auth_json({"ok": False, "error": "forbidden"}, 403)
+        data = self._json_body()
+        if path == "/api/auth/logout":
+            end_session(self._cookie_token())
+            return self._auth_json({"ok": True}, cookie=self._cookie("", 0))
+        if path not in ("/api/auth/login", "/api/auth/register"):
+            return self._auth_json({"ok": False, "error": "not_found"}, 404)
+        username, password = data.get("username"), data.get("password")
+        ukey = "u:" + str(username).lower()[:64]
+        ikey = "i:" + self._client_ip()
+        if THROTTLE.blocked(ukey, ikey):
+            return self._auth_json({"ok": False, "error": "too_many_attempts"}, 429)
+        if path == "/api/auth/register":
+            if not CTX.cfg.get("allow_register", False):
+                return self._auth_json({"ok": False, "error": "registration_closed"}, 403)
+            THROTTLE.fail(ikey)  # ook aanmaken telt mee: remt massa-registratie
+            ok, err = create_user(username, password)
+            if not ok:
+                return self._auth_json({"ok": False, "error": err}, 400 if err != "exists" else 409)
+        user = authenticate(username, password)
+        if not user:
+            THROTTLE.fail(ukey, ikey)
+            return self._auth_json({"ok": False, "error": "invalid_credentials"}, 401)
+        THROTTLE.clear(ukey)
+        token = create_session(user["id"])
+        return self._auth_json({"ok": True, "user": user["username"]}, cookie=self._cookie(token, SESSION_TTL))
 
 
 class _Server(socketserver.ThreadingMixIn, http.server.HTTPServer):
@@ -666,10 +980,14 @@ def db_info():
     return info
 
 
+HIDDEN_TABLES = ("sessions",)  # bevat sessie-hashes: nooit tonen
+
+
 def db_tables():
     with db_connect() as conn:
         return [r[0] for r in conn.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name")]
+            "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name")
+            if r[0] not in HIDDEN_TABLES]
 
 
 def db_rows(table, limit=50):
@@ -684,6 +1002,10 @@ def db_rows(table, limit=50):
             cur = conn.execute(f"SELECT * FROM {ident} LIMIT ?", (limit,))
         cols = [d[0] for d in cur.description]
         rows = [["<blob>" if isinstance(v, (bytes, bytearray)) else v for v in r] for r in cur.fetchall()]
+    if table == "users" and "pw_hash" in cols:  # wachtwoord-hashes verlaten de database nooit via het dashboard
+        i = cols.index("pw_hash")
+        for r in rows:
+            r[i] = "********"
     return {"columns": cols, "rows": rows}
 
 
@@ -722,6 +1044,7 @@ def status_dict():
         "languages": t.available(),
         "ui_size": cfg.get("ui_size", "m"),
         "open_dashboard": cfg.get("open_dashboard", True),
+        "allow_register": bool(cfg.get("allow_register", False)),
         "web": {"online": CTX.server.is_running(), "port": CTX.server.port,
                 "url": f"http://localhost:{CTX.server.port}"},
         "db": db_info(),
@@ -758,6 +1081,8 @@ def apply_settings(data):
         cfg["ui_size"] = data["ui_size"]
     if "open_dashboard" in data:
         cfg["open_dashboard"] = bool(data["open_dashboard"])
+    if "allow_register" in data:
+        cfg["allow_register"] = bool(data["allow_register"])
     if "port" in data:
         try:
             port = int(data["port"])
@@ -851,6 +1176,8 @@ class _AdminHandler(http.server.BaseHTTPRequestHandler):
                 with db_connect() as conn:
                     rows = conn.execute("SELECT id, message, timestamp FROM logs ORDER BY id DESC LIMIT 8").fetchall()
                 return self._json([{"id": r[0], "message": r[1], "at": r[2]} for r in rows])
+            if path == "/api/users":
+                return self._json(list_users())
             if path == "/api/files":
                 return self._json(list_site_files())
             if path == "/api/db":
@@ -876,6 +1203,8 @@ class _AdminHandler(http.server.BaseHTTPRequestHandler):
         if path == "/api/settings":
             ok, err = apply_settings(self._body())
             return self._json({"ok": ok, "error": err}, 200 if ok else 400)
+        if path.startswith("/api/users"):
+            return self._users_post(path)
         if path == "/api/open-folder":
             if os.name == "nt":
                 try:
@@ -884,6 +1213,27 @@ class _AdminHandler(http.server.BaseHTTPRequestHandler):
                     pass
             return self._json({"ok": True})
         return self._json({"error": "not_found"}, 404)
+
+
+    def _users_post(self, path):
+        d = self._body()
+        uid = d.get("id")
+        if path != "/api/users" and not isinstance(uid, int):
+            return self._json({"ok": False, "error": "notfound"}, 400)
+        try:
+            if path == "/api/users":
+                ok, err = create_user(d.get("username"), d.get("password"))
+            elif path == "/api/users/password":
+                ok, err = set_user_password(uid, d.get("password"))
+            elif path == "/api/users/disable":
+                ok, err = set_user_disabled(uid, bool(d.get("disabled")))
+            elif path == "/api/users/delete":
+                ok, err = delete_user(uid)
+            else:
+                return self._json({"error": "not_found"}, 404)
+        except sqlite3.Error as e:
+            return self._json({"ok": False, "error": str(e)}, 500)
+        return self._json({"ok": ok, "error": err}, 200 if ok else 400)
 
 
 class AdminServer:
