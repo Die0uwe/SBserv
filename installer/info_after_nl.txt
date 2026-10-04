@@ -1,0 +1,35 @@
+﻿SBserv is geinstalleerd
+=======================
+
+Starten
+-------
+Open SBserv via het Startmenu (of het bureaubladicoon). Druk op Enter voor de
+standaardpoort (8080); daarna opent het dashboard in een eigen venster.
+Menu: [1] site openen, [2] bestanden, [3] publieke link, [4] database-logs,
+[5] poort wijzigen, [6] link stoppen, [7] taal, [8] afsluiten, D = dashboard.
+
+Je website
+----------
+Zet je bestanden in de map "public_html" (Startmenu: "SBserv websitemap").
+Je eigen bestanden worden bij updates nooit overschreven.
+
+Database en gebruikers
+----------------------
+Je gegevens staan in database.db naast sbserv.exe. Open in het dashboard
+"Gebruikers" om accounts voor je eigen website toe te voegen. Je pagina's
+kunnen de login-API op dezelfde poort als de site gebruiken:
+  POST /api/auth/login   POST /api/auth/logout   GET /api/auth/me
+De voorbeeldpagina login.html staat in je websitemap.
+
+Publieke link (Cloudflare Quick Tunnel)
+---------------------------------------
+Kies [3] in het menu of "Start tunnel" in het dashboard. De link
+verandert elke keer. Quick Tunnels zijn om te testen: geen uptimegarantie.
+Je pc en SBserv moeten blijven draaien.
+
+Verwijderen
+-----------
+Verwijder via Windows Instellingen > Apps. Er wordt gevraagd of je je gegevens
+wilt bewaren (aanbevolen).
+
+Meer: http://scriptspace.nl

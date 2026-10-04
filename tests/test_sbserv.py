@@ -370,5 +370,46 @@ class AuthTests(unittest.TestCase):
         self.assertEqual(self.call(self.pub, "/api/auth/login", "POST", {"username": "a"})[0], 401)
 
 
+class InstallerScriptTests(unittest.TestCase):
+    """Het Inno-script moet kloppen met de app en naar bestaande bestanden verwijzen."""
+
+    @classmethod
+    def setUpClass(cls):
+        with open(os.path.join(ROOT, "sbserv_installer.iss"), encoding="utf-8") as f:
+            cls.iss = f.read()
+
+    def test_version_matches_app(self):
+        m = __import__("re").search(r'#define MyAppVersion "([^"]+)"', self.iss)
+        app = open(os.path.join(ROOT, "sbserv.py"), encoding="utf-8").read()
+        self.assertEqual(m.group(1), __import__("re").search(r'APP_VERSION = "([^"]+)"', app).group(1))
+
+    def test_referenced_files_exist(self):
+        import re
+        paths = re.findall(r'(?:SetupIconFile=|InfoBeforeFile: "|InfoAfterFile: ")([^";\r\n]+)', self.iss)
+        paths += re.findall(r'WizardImageFile=([^\r\n]+)|WizardSmallImageFile=([^\r\n]+)', self.iss)
+        flat = []
+        for p in paths:
+            flat += [x for x in (p if isinstance(p, tuple) else (p,)) for x in x.split(",") if x]
+        self.assertGreaterEqual(len(flat), 9)
+        for p in flat:
+            self.assertTrue(os.path.exists(os.path.join(ROOT, p.strip().replace("\\", "/"))), p)
+
+    def test_languages_and_info_pages(self):
+        self.assertIn("Languages\\Dutch.isl", self.iss)
+        self.assertFalse([l for l in self.iss.splitlines() if l.startswith("Name:") and "Dutchduc" in l])
+        for code in ("en", "nl"):
+            for kind in ("before", "after"):
+                raw = open(os.path.join(ROOT, "installer", f"info_{kind}_{code}.txt"), "rb").read()
+                self.assertTrue(raw.startswith(b"\xef\xbb\xbf"))  # UTF-8 met BOM: ë/é blijven goed
+                self.assertIn(b"\r\n", raw)
+
+    def test_kit_script_and_uninstall_prompt(self):
+        self.assertIn("KeepData", self.iss)
+        self.assertIn("usPostUninstall", self.iss)
+        kit = open(os.path.join(ROOT, "make_kit.bat"), "rb").read()
+        self.assertIn(b"SBserv_kit", kit)
+        self.assertIn(b"\r\n", kit)
+
+
 if __name__ == "__main__":
     unittest.main()

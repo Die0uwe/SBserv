@@ -68,6 +68,11 @@ build.bat
 This (1) installs PyInstaller, (2) builds `dist\sbserv.exe` with the logo as icon, (3) fetches `cloudflared.exe`, (4) compiles `sbserv_installer.iss` into `SBserv_Setup_v1.1.exe`.
 Without `build.bat` the `.iss` falls back to `sbserv.py` (then Python must be installed on the PC).
 
+**All-in-one folder / Alles in een map.** Double-click `make_kit.bat` (`make_kit.bat norebuild` reuses an existing `dist\sbserv.exe`). It builds the exe, fetches `cloudflared.exe`, collects **everything** in `SBserv_kit\` (exe, `cloudflared.exe`, logo/icons/installer images in `assets\`, README, CHANGELOG, the info pages shown before/after installing in `installer\`, the Inno script) and compiles `SBserv_kit\SBserv_Setup_v1.1.exe` there. You can zip or move that folder and compile it on any PC with Inno Setup (`installer.bat` or Ctrl+F9). / Dubbelklik `make_kit.bat`: bouwt de exe, haalt `cloudflared.exe` op, zet **alles** in `SBserv_kit\` (exe, `cloudflared.exe`, logo/iconen/installerplaatjes, README, CHANGELOG, de info-pagina's voor en na de installatie, het Inno-script) en compileert daar `SBserv_Setup_v1.1.exe`. De map kun je zippen of verplaatsen en op elke pc met Inno Setup compileren.
+
+The installer: language choice EN/NL, info page **before** and **after** installing (`installer\info_*.txt`), optional licence page (put a `LICENSE.txt` next to the script), Start-menu group with the website folder and uninstall, optional desktop icon, running SBserv is stopped before an update, and on uninstall it asks whether to keep your data (database, settings, `public_html`; silent uninstall keeps it). Not yet compiled or run on Windows by me.
+/ De installer: taalkeuze EN/NL, infopagina **voor** en **na** de installatie, optionele licentiepagina (zet een `LICENSE.txt` naast het script), Startmenu-groep met websitemap en verwijderen, optioneel bureaubladicoon, een draaiende SBserv wordt voor een update gestopt, en bij verwijderen wordt gevraagd of je gegevens bewaard blijven (stil verwijderen behoudt ze). Nog niet door mij op Windows gecompileerd of uitgevoerd.
+
 **Already have `sbserv.exe`? / Heb je al een `sbserv.exe`?** Put it next to `sbserv_installer.iss` (or in `dist\`), open the `.iss` in Inno Setup and press Ctrl+F9, or double-click `installer.bat`. / Zet hem naast `sbserv_installer.iss` (of in `dist\`), open de `.iss` in Inno Setup en druk Ctrl+F9, of dubbelklik `installer.bat`.
 
 **Option B - nothing to install / Optie B - niets installeren.** GitHub builds it for you: *Actions > Build installer > Run workflow*, then download the `SBserv-installer` artifact. Pushing a tag like `v1.0.0` also publishes it as a Release.
@@ -97,6 +102,8 @@ Strings live in `assets/lang/<code>.json` (copy `en.json`, translate the values,
 sbserv.py               the application / de applicatie
 sbserv_installer.iss    Inno Setup script (logo, EN/NL, shortcuts) / Inno Setup-script
 build.bat               exe + cloudflared + installer in one go / alles in één keer
+make_kit.bat            builds SBserv_kit\ with everything for Inno + the installer / maakt SBserv_kit\ met alles voor Inno + de installer
+installer/              info pages shown before/after installing (EN/NL) / infopagina's voor en na de installatie
 installer.bat           installer only, from an existing sbserv.exe / alleen de installer
 assets/                 logo, favicon, installer images, start page, dashboard.html, lang/*.json
 assets/source/          original logo (source of all icons) / originele logo (bron van alle iconen)

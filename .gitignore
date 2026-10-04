@@ -3,6 +3,7 @@ build/
 dist/
 *.spec
 Output/
+SBserv_kit/
 SBserv_Setup_*.exe
 cloudflared.exe
 # python

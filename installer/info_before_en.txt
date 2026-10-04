@@ -1,0 +1,27 @@
+﻿SBserv - standalone web server with database
+============================================
+
+SBserv runs your own website on your own PC, with a built-in SQLite database,
+a dashboard to manage it, and an optional public link.
+
+What gets installed
+-------------------
+* SBserv (sbserv.exe) - the web server and dashboard. No Python needed.
+* cloudflared - only used when you switch on the public link
+  (Cloudflare Quick Tunnel). If it is not included, SBserv downloads and
+  checks it itself the first time you need it.
+* A start page, logo and icons, English and Dutch translations.
+
+Good to know
+------------
+* The website only listens on 127.0.0.1 (your own PC). It becomes reachable
+  from the internet only while you run the public link.
+* Everything in the folder "public_html" is public while that link runs.
+  Do not put secrets there.
+* The dashboard is separate (127.0.0.1 only) and is never part of the public
+  link.
+* Updating or reinstalling keeps your database, settings and website files.
+* Requirements: Windows 10 or later, an internet connection for the public
+  link (outgoing port 7844).
+
+Click Next to continue.

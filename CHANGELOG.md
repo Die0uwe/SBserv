@@ -7,7 +7,9 @@
 - Dashboard: *Users* screen (add, set password, disable, delete, allow registration); EN/NL strings (147 keys each).
 - Example page `login.html` (EN/NL) placed in `public_html` without overwriting.
 - Database view hides the `sessions` table and masks `pw_hash`.
-- 10 new tests (24 in total).
+- Full Inno Setup script: info page before and after installing (EN/NL, `installer\info_*.txt`), optional licence page, Start-menu group (app, website folder, uninstall), "open website folder" after install, stops a running SBserv before install/uninstall, asks on uninstall whether to keep data (database, config, `public_html`), docs installed to `docs\`, Windows 10+.
+- `make_kit.bat`: builds the exe and collects everything for Inno (exe, cloudflared, assets, README, CHANGELOG, info pages, script) in `SBserv_kit\`, then compiles the installer there.
+- 14 new tests (28 in total, incl. installer script checks).
 
 ## 1.0.0 - 2026-10-04
 First release of SBserv (grown out of the earlier "play_assistant" prototype).

@@ -1,0 +1,35 @@
+﻿SBserv is installed
+===================
+
+Start
+-----
+Open SBserv from the Start menu (or the desktop icon). Press Enter to accept
+the default port (8080), then the dashboard opens in its own window.
+Menu: [1] open site, [2] files, [3] public link, [4] database logs,
+[5] change port, [6] stop link, [7] language, [8] exit, D = dashboard.
+
+Your website
+------------
+Put your files in the folder "public_html" (Start menu: "SBserv website
+folder"). Your own files are never overwritten by updates.
+
+Database and users
+------------------
+Your data lives in database.db next to sbserv.exe. In the dashboard, open
+"Users" to add accounts for your own website. Your pages can use the login API
+on the same port as the site:
+  POST /api/auth/login   POST /api/auth/logout   GET /api/auth/me
+The example page login.html is in your website folder.
+
+Public link (Cloudflare Quick Tunnel)
+-------------------------------------
+Choose [3] in the menu or "Start tunnel" in the dashboard. The link
+changes every time. Quick Tunnels are for testing: no uptime guarantee.
+Your PC and SBserv must stay running.
+
+Remove
+------
+Uninstall via Windows Settings > Apps. You are asked whether to keep your
+data (recommended).
+
+More: http://scriptspace.nl
