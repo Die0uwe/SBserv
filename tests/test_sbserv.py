@@ -403,6 +403,11 @@ class InstallerScriptTests(unittest.TestCase):
                 self.assertTrue(raw.startswith(b"\xef\xbb\xbf"))  # UTF-8 met BOM: ë/é blijven goed
                 self.assertIn(b"\r\n", raw)
 
+    def test_dark_wizard_guarded_for_old_inno(self):
+        self.assertIn("WizardStyle=modern dark", self.iss)
+        self.assertIn("#if Ver >= 0x06060000", self.iss)  # oudere Inno-versies kennen "dark" niet
+        self.assertIn("WizardStyle=modern\n", self.iss.replace("\r\n", "\n"))
+
     def test_kit_script_and_uninstall_prompt(self):
         self.assertIn("KeepData", self.iss)
         self.assertIn("usPostUninstall", self.iss)

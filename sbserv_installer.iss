@@ -1,5 +1,5 @@
 ; ============================================================================
-; SBserv Installer Script  -  voor Inno Setup 6.3 of nieuwer
+; SBserv Installer Script  -  Inno Setup 6.3 of nieuwer (donker thema vanaf 6.6.0)
 ; ============================================================================
 ; Zo gebruik je het:
 ;   * Alles-in-een-map: dubbelklik make_kit.bat. Dat bouwt sbserv.exe, haalt
@@ -56,7 +56,12 @@ OutputDir=.
 OutputBaseFilename=SBserv_Setup_v{#MyAppVersion}
 Compression=lzma2
 SolidCompression=yes
+#if Ver >= 0x06060000
+; Donkere installer (Inno Setup 6.6.0 of nieuwer). Liever meebewegen met Windows? Zet "dark" op "dynamic".
+WizardStyle=modern dark
+#else
 WizardStyle=modern
+#endif
 MinVersion=10.0
 ArchitecturesInstallIn64BitMode=x64compatible
 SetupLogging=yes

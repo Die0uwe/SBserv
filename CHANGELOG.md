@@ -8,6 +8,7 @@
 - Example page `login.html` (EN/NL) placed in `public_html` without overwriting.
 - Database view hides the `sessions` table and masks `pw_hash`.
 - Full Inno Setup script: info page before and after installing (EN/NL, `installer\info_*.txt`), optional licence page, Start-menu group (app, website folder, uninstall), "open website folder" after install, stops a running SBserv before install/uninstall, asks on uninstall whether to keep data (database, config, `public_html`), docs installed to `docs\`, Windows 10+.
+- Dark installer wizard (`WizardStyle=modern dark`, Inno Setup 6.6.0+; falls back to the light style on older versions).
 - `make_kit.bat`: builds the exe and collects everything for Inno (exe, cloudflared, assets, README, CHANGELOG, info pages, script) in `SBserv_kit\`, then compiles the installer there.
 - 14 new tests (28 in total, incl. installer script checks).
 
