@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SBserv</title>
+<link rel="icon" href="favicon.ico" sizes="any">
+<link rel="icon" type="image/png" href="favicon-32.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<style>
+  body{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background:#071526;color:#e2e8f0;margin:0;padding:40px 16px}
+  .container{max-width:800px;margin:0 auto;background:#0e2238;padding:40px;border-radius:12px;box-shadow:0 10px 25px rgba(0,0,0,.5);border:1px solid #1f3b5c;position:relative}
+  .logo{display:block;width:140px;height:140px;border-radius:18px;margin:0 auto 16px;box-shadow:0 0 30px rgba(56,189,248,.35)}
+  h1{color:#38bdf8;margin:0 0 8px;text-align:center}
+  h2{color:#34d399;font-size:1.2rem;border-bottom:1px solid #1f3b5c;padding-bottom:8px}
+  ul{line-height:1.6}
+  code{background:#071526;padding:4px 8px;border-radius:4px;color:#f472b6;font-family:monospace}
+  .box{background:#071526;padding:15px;border-radius:8px;border-left:4px solid #38bdf8;margin:20px 0}
+  .lang{position:absolute;top:14px;right:14px}
+  .lang button{background:#071526;color:#e2e8f0;border:1px solid #1f3b5c;border-radius:6px;padding:4px 10px;cursor:pointer;margin-left:4px}
+  .lang button.on{background:#38bdf8;color:#071526;font-weight:600}
+  .lead{text-align:center}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="lang"><button data-l="en">EN</button><button data-l="nl">NL</button></div>
+  <img class="logo" src="logo_512.png" alt="SBserv logo">
+  <h1>SBserv</h1>
+  <p class="lead" data-en="Welcome to SBserv! Your local web server with built-in database is up and running. This is the automatic start page." data-nl="Welkom bij SBserv! Je lokale webserver met ingebouwde database draait. Dit is de automatische startpagina."></p>
+  <div class="box"><strong data-en="How do you use this?" data-nl="Hoe gebruik je dit?"></strong>
+    <ul>
+      <li data-en="Put your HTML, CSS, JavaScript or images in the <code>public_html</code> folder." data-nl="Plaats je HTML, CSS, JavaScript of afbeeldingen in de map <code>public_html</code>."></li>
+      <li data-en="Replace this welcome page with your own <code>index.html</code> in that folder." data-nl="Vervang dit welkomstscherm door je eigen <code>index.html</code> in die map."></li>
+      <li data-en="Use the menu in the black window to open the site or make it public." data-nl="Gebruik het menu in het zwarte venster om de site te openen of publiek te maken."></li>
+    </ul></div>
+  <h2 data-en="📂 Folder structure" data-nl="📂 Mapstructuur"></h2>
+  <p data-en="Your files are served live from <code>public_html/</code>." data-nl="Je bestanden worden live ingelezen uit <code>public_html/</code>."></p>
+  <h2 data-en="🗄️ Database" data-nl="🗄️ Database"></h2>
+  <p data-en="A local SQLite database (<code>database.db</code>) is ready for project tests and logs." data-nl="Een lokale SQLite database (<code>database.db</code>) staat klaar voor projecttests en logs."></p>
+  <h2 data-en="🌍 Go public" data-nl="🌍 Publiek maken"></h2>
+  <p data-en="Choose menu option 3 for a temporary <code>trycloudflare.com</code> link. Only the contents of <code>public_html</code> are shared." data-nl="Kies menu-optie 3 voor een tijdelijke <code>trycloudflare.com</code>-link. Alleen de inhoud van <code>public_html</code> wordt gedeeld."></p>
+</div>
+<script>
+(function(){
+  var l='en';
+  try{l=localStorage.getItem('sp_lang')||((navigator.language||'en').slice(0,2)==='nl'?'nl':'en');}catch(e){}
+  function apply(x){
+    document.documentElement.lang=x;
+    document.querySelectorAll('[data-en]').forEach(function(el){el.innerHTML=el.getAttribute('data-'+x)||el.getAttribute('data-en');});
+    document.querySelectorAll('.lang button').forEach(function(b){b.classList.toggle('on',b.dataset.l===x);});
+    try{localStorage.setItem('sp_lang',x);}catch(e){}
+  }
+  document.querySelectorAll('.lang button').forEach(function(b){b.onclick=function(){apply(b.dataset.l);};});
+  apply(l);
+})();
+</script>
+</body>
+</html>

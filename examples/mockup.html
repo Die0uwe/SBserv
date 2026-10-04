@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SBserv - dashboard mockup</title>
+<link rel="icon" href="favicon.ico" sizes="any">
+<style>
+  :root{
+    --abyss:#06121f; --plate:#0b2033; --plate-2:#0f2a42; --seam:#1c3b5a;
+    --cyan:#3fd4ff; --cyan-dim:#1d6f8c; --ok:#3ddc97; --warn:#ffb454; --bad:#ff6b6b;
+    --text:#dbe9f6; --muted:#7f9ab3;
+    --ui:Bahnschrift,"Segoe UI Variable","Segoe UI",system-ui,sans-serif;
+    --mono:"Cascadia Mono",Consolas,"SFMono-Regular",monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{background:var(--abyss);color:var(--text);font:15px/1.5 var(--ui);min-height:100vh}
+  button,input,select{font:inherit;color:inherit}
+  :focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
+  .app{display:grid;grid-template-columns:232px 1fr;min-height:100vh}
+
+  /* rail */
+  .rail{background:linear-gradient(180deg,#081a2b,#06121f);border-right:1px solid var(--seam);padding:20px 14px;display:flex;flex-direction:column;gap:22px}
+  .brand{display:flex;align-items:center;gap:12px;padding:0 6px}
+  .brand img{width:44px;height:44px;border-radius:10px;box-shadow:0 0 18px rgba(63,212,255,.35)}
+  .brand b{font-size:20px;letter-spacing:.02em}
+  .brand small{display:block;color:var(--muted);font-size:12px;margin-top:-2px}
+  nav{display:flex;flex-direction:column;gap:2px}
+  nav button{background:none;border:0;text-align:left;padding:10px 12px;border-radius:8px;color:var(--muted);cursor:pointer;display:flex;gap:10px;align-items:center}
+  nav button:hover{color:var(--text);background:rgba(63,212,255,.06)}
+  nav button[aria-current="page"]{color:var(--text);background:var(--plate-2);box-shadow:inset 3px 0 0 var(--cyan)}
+  nav svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:1.7}
+  .rail-foot{margin-top:auto;color:var(--muted);font-size:13px}
+  .lang{display:inline-flex;border:1px solid var(--seam);border-radius:8px;overflow:hidden;margin-bottom:10px}
+  .lang button{background:none;border:0;padding:5px 12px;cursor:pointer;color:var(--muted)}
+  .lang button.on{background:var(--cyan);color:var(--abyss);font-weight:700}
+
+  /* main */
+  main{padding:28px clamp(16px,3vw,40px) 60px;max-width:1100px;width:100%}
+  .banner{font-size:13px;color:var(--warn);border:1px dashed rgba(255,180,84,.5);border-radius:8px;padding:6px 12px;display:inline-block;margin-bottom:18px}
+  h1{font-size:28px;font-weight:600;margin:0 0 4px;letter-spacing:.01em}
+  .sub{color:var(--muted);margin:0 0 24px}
+  section[hidden]{display:none}
+
+  /* status plate: one continuous panel, not cards */
+  .plate{background:linear-gradient(180deg,var(--plate-2),var(--plate));border:1px solid var(--seam);border-radius:14px}
+  .strip{display:grid;grid-template-columns:repeat(3,1fr)}
+  .strip>div{padding:18px 22px;border-left:1px solid var(--seam)}
+  .strip>div:first-child{border-left:0}
+  .strip .k{color:var(--muted);font-size:13px}
+  .pill{display:inline-flex;align-items:center;gap:8px;font-weight:700;font-size:18px;margin:4px 0}
+  .dot{width:10px;height:10px;border-radius:50%;background:var(--ok);box-shadow:0 0 10px var(--ok)}
+  .dot.off{background:#51657a;box-shadow:none}
+  .mono{font-family:var(--mono);font-size:13px;color:var(--muted)}
+
+  /* the beam: the one memorable element */
+  .beam{margin-top:18px;padding:22px 24px;position:relative;overflow:hidden}
+  .beam::before{content:"";position:absolute;left:-10%;right:-10%;top:50%;height:2px;background:linear-gradient(90deg,transparent,var(--cyan),transparent);opacity:.0;transform:translateY(-1px)}
+  .beam.live::before{opacity:.85;filter:drop-shadow(0 0 8px var(--cyan))}
+  .beam .row{position:relative;display:flex;gap:14px;align-items:center;flex-wrap:wrap}
+  .url{font-family:var(--mono);font-size:clamp(15px,2.4vw,24px);color:var(--cyan);background:rgba(6,18,31,.88);padding:8px 14px;border-radius:8px;border:1px solid var(--cyan-dim);word-break:break-all}
+  .beam.idle .url{color:var(--muted);border-color:var(--seam)}
+  .btn{background:var(--plate-2);border:1px solid var(--seam);border-radius:8px;padding:8px 14px;cursor:pointer}
+  .btn:hover{border-color:var(--cyan)}
+  .btn.primary{background:var(--cyan);color:var(--abyss);border-color:var(--cyan);font-weight:700}
+  .btn.stop{border-color:var(--bad);color:var(--bad)}
+  .beam p{margin:12px 0 0;color:var(--muted);font-size:14px;position:relative}
+
+  .two{display:grid;grid-template-columns:1.2fr 1fr;gap:18px;margin-top:18px}
+  .pad{padding:18px 22px}
+  h2{font-size:16px;font-weight:600;margin:0 0 12px}
+  ul.log{list-style:none;margin:0;padding:0;font-family:var(--mono);font-size:13px}
+  ul.log li{display:flex;gap:12px;padding:6px 0;border-top:1px solid rgba(28,59,90,.6)}
+  ul.log li:first-child{border-top:0}
+  ul.log time{color:var(--muted);flex:none}
+  svg.spark{width:100%;height:84px}
+
+  /* tables */
+  table{width:100%;border-collapse:collapse;font-size:14px}
+  th,td{text-align:left;padding:9px 12px;border-bottom:1px solid rgba(28,59,90,.7)}
+  th{color:var(--muted);font-weight:500}
+  td.num{font-family:var(--mono);text-align:right}
+  tr:hover td{background:rgba(63,212,255,.04)}
+  .tabs{display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap}
+  .tabs button{background:none;border:1px solid var(--seam);border-radius:999px;padding:5px 14px;cursor:pointer;color:var(--muted)}
+  .tabs button[aria-pressed="true"]{background:var(--cyan);border-color:var(--cyan);color:var(--abyss);font-weight:700}
+  .sql{display:flex;gap:10px;margin-top:14px}
+  .sql input{flex:1;background:var(--abyss);border:1px solid var(--seam);border-radius:8px;padding:9px 12px;font-family:var(--mono);font-size:13px}
+  .drop{border:2px dashed var(--seam);border-radius:12px;padding:26px;text-align:center;color:var(--muted);margin-top:16px}
+  .tag{font-size:12px;border:1px solid var(--seam);border-radius:6px;padding:1px 8px;color:var(--muted)}
+
+  /* wizard */
+  .steps{display:flex;gap:0;margin-bottom:22px}
+  .steps li{list-style:none;flex:1;padding:10px 14px;border-bottom:3px solid var(--seam);color:var(--muted)}
+  .steps li.done{border-color:var(--ok);color:var(--text)}
+  .steps li.cur{border-color:var(--cyan);color:var(--text);font-weight:700}
+  .steps{padding:0;margin:0 0 22px}
+  .field{display:grid;gap:6px;margin-bottom:16px;max-width:460px}
+  .field label{color:var(--muted);font-size:14px}
+  .field input,.field select{background:var(--abyss);border:1px solid var(--seam);border-radius:8px;padding:10px 12px}
+  .hint{color:var(--muted);font-size:13px}
+  .wiz-actions{display:flex;gap:10px;margin-top:8px}
+  .toast{position:fixed;right:20px;bottom:20px;background:var(--plate-2);border:1px solid var(--cyan);border-radius:10px;padding:10px 16px;opacity:0;transform:translateY(8px);transition:opacity .2s,transform .2s;pointer-events:none}
+  .toast.show{opacity:1;transform:none}
+
+  @media (max-width:820px){
+    .app{grid-template-columns:1fr}
+    .rail{flex-direction:row;flex-wrap:wrap;align-items:center;padding:12px;gap:10px}
+    .rail-foot{margin:0 0 0 auto}.rail-foot>div:last-child{display:none}.rail-foot .lang{margin:0}
+    nav{flex-direction:row;flex-wrap:wrap}
+    .strip{grid-template-columns:1fr}
+    .strip>div{border-left:0;border-top:1px solid var(--seam)}
+    .strip>div:first-child{border-top:0}
+    .two{grid-template-columns:1fr}
+  }
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+  @keyframes sweep{from{background-position:-200% 0}to{background-position:200% 0}}
+  .beam.live::after{content:"";position:absolute;inset:0;background:linear-gradient(100deg,transparent 40%,rgba(63,212,255,.12) 50%,transparent 60%);background-size:200% 100%;animation:sweep 5s linear infinite;pointer-events:none}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="rail">
+    <div class="brand"><img src="logo_512.png" alt="SBserv logo"><div><b>SBserv</b><small data-en="Local web server" data-nl="Lokale webserver"></small></div></div>
+    <nav aria-label="Main">
+      <button data-go="dash" aria-current="page"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></svg><span data-en="Dashboard" data-nl="Dashboard"></span></button>
+      <button data-go="sites"><svg viewBox="0 0 24 24"><path d="M3 7h6l2 2h10v10H3z"/></svg><span data-en="Website files" data-nl="Websitebestanden"></span></button>
+      <button data-go="db"><svg viewBox="0 0 24 24"><ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/></svg><span data-en="Database" data-nl="Database"></span></button>
+      <button data-go="setup"><svg viewBox="0 0 24 24"><path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M18 6l-2.5 2.5M8.5 15.5 6 18"/></svg><span data-en="Easy setup" data-nl="Eenvoudige setup"></span></button>
+    </nav>
+    <div class="rail-foot">
+      <div class="lang" role="group" aria-label="Language"><button data-l="en">EN</button><button data-l="nl">NL</button></div>
+      <div>SBserv v1.0 · Windows</div>
+    </div>
+  </aside>
+
+  <main>
+    <span class="banner" data-en="Mockup with sample data. Nothing here is connected." data-nl="Mockup met voorbeelddata. Niets hiervan is gekoppeld."></span>
+
+    <!-- DASHBOARD -->
+    <section id="dash">
+      <h1 data-en="Dashboard" data-nl="Dashboard"></h1>
+      <p class="sub" data-en="Your server, database and public link at a glance." data-nl="Je server, database en publieke link in één oogopslag."></p>
+
+      <div class="plate strip">
+        <div><span class="k" data-en="Web server" data-nl="Webserver"></span><br><span class="pill"><i class="dot"></i><span data-en="Online" data-nl="Online"></span></span><br><span class="mono">http://localhost:8080</span></div>
+        <div><span class="k" data-en="Database" data-nl="Database"></span><br><span class="pill"><i class="dot"></i><span data-en="Online" data-nl="Online"></span></span><br><span class="mono">database.db · 148 KB · 3 <span data-en="tables" data-nl="tabellen"></span></span></div>
+        <div><span class="k" data-en="Uptime" data-nl="Looptijd"></span><br><span class="pill" id="uptime">02:14:09</span><br><span class="mono" data-en="since 14:08 today" data-nl="sinds 14:08 vandaag"></span></div>
+      </div>
+
+      <div class="plate beam live" id="beam">
+        <h2 data-en="Public link" data-nl="Publieke link"></h2>
+        <div class="row">
+          <span class="url" id="url">https://quiet-harbor-4821.trycloudflare.com</span>
+          <button class="btn primary" id="copy" data-en="Copy link" data-nl="Link kopiëren"></button>
+          <button class="btn stop" id="toggle" data-en="Stop tunnel" data-nl="Stop tunnel"></button>
+        </div>
+        <p id="beamnote" data-en="Anyone with this link can see the files in public_html. The link changes every time you start the tunnel." data-nl="Iedereen met deze link ziet de bestanden in public_html. De link verandert elke keer dat je de tunnel start."></p>
+      </div>
+
+      <div class="two">
+        <div class="plate pad">
+          <h2 data-en="Visitors, last 24 hours" data-nl="Bezoekers, laatste 24 uur"></h2>
+          <svg class="spark" viewBox="0 0 300 84" preserveAspectRatio="none" role="img" aria-label="Sample chart">
+            <defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3fd4ff" stop-opacity=".35"/><stop offset="1" stop-color="#3fd4ff" stop-opacity="0"/></linearGradient></defs>
+            <path d="M0 70 L20 64 L40 66 L60 52 L80 58 L100 40 L120 44 L140 30 L160 36 L180 22 L200 30 L220 18 L240 26 L260 14 L280 20 L300 10 L300 84 L0 84Z" fill="url(#g)"/>
+            <path d="M0 70 L20 64 L40 66 L60 52 L80 58 L100 40 L120 44 L140 30 L160 36 L180 22 L200 30 L220 18 L240 26 L260 14 L280 20 L300 10" fill="none" stroke="#3fd4ff" stroke-width="2" vector-effect="non-scaling-stroke"/>
+          </svg>
+          <span class="mono">312 <span data-en="requests · 41 visitors" data-nl="verzoeken · 41 bezoekers"></span></span>
+        </div>
+        <div class="plate pad">
+          <h2 data-en="Latest activity" data-nl="Laatste activiteit"></h2>
+          <ul class="log">
+            <li><time>16:21</time><span data-en="Tunnel started" data-nl="Tunnel gestart"></span></li>
+            <li><time>16:20</time><span data-en="cloudflared checked: ready" data-nl="cloudflared gecontroleerd: klaar"></span></li>
+            <li><time>14:08</time><span data-en="Server started on port 8080" data-nl="Server gestart op poort 8080"></span></li>
+            <li><time>14:08</time><span data-en="SBserv environment check completed" data-nl="SBserv omgevingscheck voltooid"></span></li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- SITES -->
+    <section id="sites" hidden>
+      <h1 data-en="Website files" data-nl="Websitebestanden"></h1>
+      <p class="sub" data-en="Everything in public_html is served live." data-nl="Alles in public_html wordt live getoond."></p>
+      <div class="plate pad">
+        <table>
+          <thead><tr><th data-en="File" data-nl="Bestand"></th><th data-en="Type" data-nl="Type"></th><th class="num" style="text-align:right" data-en="Size" data-nl="Grootte"></th><th></th></tr></thead>
+          <tbody>
+            <tr><td>index.html</td><td><span class="tag">HTML</span></td><td class="num">4.2 KB</td><td><button class="btn" data-en="Open" data-nl="Openen"></button></td></tr>
+            <tr><td>logo_512.png</td><td><span class="tag">PNG</span></td><td class="num">298 KB</td><td><button class="btn" data-en="Open" data-nl="Openen"></button></td></tr>
+            <tr><td>favicon.ico</td><td><span class="tag">ICO</span></td><td class="num">130 KB</td><td><button class="btn" data-en="Open" data-nl="Openen"></button></td></tr>
+            <tr><td>mijn-project/</td><td><span class="tag" data-en="folder" data-nl="map"></span></td><td class="num">12 <span data-en="files" data-nl="bestanden"></span></td><td><button class="btn" data-en="Open" data-nl="Openen"></button></td></tr>
+          </tbody>
+        </table>
+        <div class="drop" data-en="Drop files here, or copy them into the public_html folder." data-nl="Sleep bestanden hierheen, of kopieer ze naar de map public_html."></div>
+      </div>
+    </section>
+
+    <!-- DATABASE -->
+    <section id="db" hidden>
+      <h1 data-en="Database" data-nl="Database"></h1>
+      <p class="sub" data-en="SQLite file in your data folder. Browse tables and run a query." data-nl="SQLite-bestand in je datamap. Bekijk tabellen en voer een query uit."></p>
+      <div class="plate pad">
+        <div class="tabs" id="tabs"><button aria-pressed="true" data-t="logs">logs</button><button aria-pressed="false" data-t="visitors">visitors</button><button aria-pressed="false" data-t="notes">notes</button></div>
+        <table id="dbtable"></table>
+        <div class="sql"><input aria-label="SQL" value="SELECT * FROM logs ORDER BY id DESC LIMIT 10;"><button class="btn primary" data-en="Run query" data-nl="Query uitvoeren" id="run"></button></div>
+      </div>
+    </section>
+
+    <!-- SETUP -->
+    <section id="setup" hidden>
+      <h1 data-en="Easy setup" data-nl="Eenvoudige setup"></h1>
+      <p class="sub" data-en="Three questions and your server is ready." data-nl="Drie vragen en je server staat klaar."></p>
+      <div class="plate pad">
+        <ol class="steps" id="steps">
+          <li class="cur" data-en="Port" data-nl="Poort"></li>
+          <li data-en="Folder" data-nl="Map"></li>
+          <li data-en="Database" data-nl="Database"></li>
+        </ol>
+        <div id="wiz"></div>
+        <div class="wiz-actions"><button class="btn" id="back" data-en="Back" data-nl="Terug"></button><button class="btn primary" id="next" data-en="Next" data-nl="Volgende"></button></div>
+      </div>
+    </section>
+  </main>
+</div>
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+(function(){
+  var L='en';
+  try{L=localStorage.getItem('sb_lang')||((navigator.language||'en').slice(0,2)==='nl'?'nl':'en');}catch(e){}
+  var D={
+    copied:{en:'Link copied',nl:'Link gekopieerd'}, stop:{en:'Stop tunnel',nl:'Stop tunnel'}, start:{en:'Start tunnel',nl:'Start tunnel'},
+    off:{en:'Tunnel is off. Start it to get a public link.',nl:'Tunnel staat uit. Start hem voor een publieke link.'},
+    on:{en:'Anyone with this link can see the files in public_html. The link changes every time you start the tunnel.',nl:'Iedereen met deze link ziet de bestanden in public_html. De link verandert elke keer dat je de tunnel start.'},
+    nolink:{en:'No public link',nl:'Geen publieke link'}, ran:{en:'Query ran: 4 rows',nl:'Query uitgevoerd: 4 rijen'},
+    finish:{en:'Start SBserv',nl:'Start SBserv'}, next:{en:'Next',nl:'Volgende'}, ready:{en:'SBserv is ready on port ',nl:'SBserv staat klaar op poort '},
+    p_l:{en:'Port number',nl:'Poortnummer'}, p_h:{en:'8080 works for most people. If it is busy, SBserv picks the next free one.',nl:'8080 werkt voor de meeste mensen. Is hij bezet, dan kiest SBserv de eerstvolgende vrije.'},
+    f_l:{en:'Website folder',nl:'Websitemap'}, f_h:{en:'Your files go in public_html inside this folder.',nl:'Je bestanden komen in public_html binnen deze map.'},
+    d_l:{en:'Database file',nl:'Databasebestand'}, d_h:{en:'SQLite needs no account or password.',nl:'SQLite heeft geen account of wachtwoord nodig.'},
+    d_o:{en:'Create database.db with a logs table',nl:'Maak database.db met een logs-tabel'}
+  };
+  function t(k){return D[k][L];}
+  function toast(m){var e=document.getElementById('toast');e.textContent=m;e.classList.add('show');setTimeout(function(){e.classList.remove('show')},1800);}
+  var tunnelOn=true;
+  function applyLang(x){
+    L=x;document.documentElement.lang=x;
+    document.querySelectorAll('[data-en]').forEach(function(el){el.textContent=el.getAttribute('data-'+x)||el.getAttribute('data-en');});
+    document.querySelectorAll('.lang button').forEach(function(b){b.classList.toggle('on',b.dataset.l===x);});
+    try{localStorage.setItem('sb_lang',x);}catch(e){}
+    drawTunnel();drawWiz();
+  }
+  document.querySelectorAll('.lang button').forEach(function(b){b.onclick=function(){applyLang(b.dataset.l);};});
+
+  /* nav */
+  document.querySelectorAll('nav button').forEach(function(b){b.onclick=function(){
+    document.querySelectorAll('nav button').forEach(function(o){o.removeAttribute('aria-current');});
+    b.setAttribute('aria-current','page');
+    document.querySelectorAll('main section').forEach(function(s){s.hidden=s.id!==b.dataset.go;});
+  };});
+
+  /* tunnel */
+  function drawTunnel(){
+    var beam=document.getElementById('beam');
+    beam.classList.toggle('live',tunnelOn);beam.classList.toggle('idle',!tunnelOn);
+    document.getElementById('url').textContent=tunnelOn?'https://quiet-harbor-4821.trycloudflare.com':t('nolink');
+    var tg=document.getElementById('toggle');tg.textContent=tunnelOn?t('stop'):t('start');
+    tg.className='btn '+(tunnelOn?'stop':'primary');
+    document.getElementById('copy').disabled=!tunnelOn;
+    document.getElementById('beamnote').textContent=tunnelOn?t('on'):t('off');
+  }
+  document.getElementById('toggle').onclick=function(){tunnelOn=!tunnelOn;drawTunnel();};
+  document.getElementById('copy').onclick=function(){
+    var u=document.getElementById('url').textContent;
+    try{navigator.clipboard.writeText(u);}catch(e){}
+    toast(t('copied'));
+  };
+
+  /* uptime tick */
+  var s=2*3600+14*60+9;
+  setInterval(function(){s++;var h=Math.floor(s/3600),m=Math.floor(s%3600/60),x=s%60;
+    document.getElementById('uptime').textContent=[h,m,x].map(function(n){return String(n).padStart(2,'0');}).join(':');},1000);
+
+  /* database */
+  var T={
+    logs:{h:['id','message','timestamp'],r:[[4,'Tunnel started: quiet-harbor-4821','2026-10-04 16:21'],[3,'Server started on port 8080','2026-10-04 14:08'],[2,'SBserv closed.','2026-10-04 12:40'],[1,'SBserv environment check completed.','2026-10-04 12:02']]},
+    visitors:{h:['id','path','at'],r:[[3,'/index.html','2026-10-04 16:24'],[2,'/mijn-project/','2026-10-04 16:23'],[1,'/','2026-10-04 16:22']]},
+    notes:{h:['id','title'],r:[[1,'Try the tunnel with a friend']]}
+  };
+  function drawTable(n){
+    var d=T[n],h='<thead><tr>'+d.h.map(function(c){return '<th>'+c+'</th>';}).join('')+'</tr></thead><tbody>';
+    d.r.forEach(function(r){h+='<tr>'+r.map(function(c,i){return '<td'+(i===0?' class="num"':'')+'>'+c+'</td>';}).join('')+'</tr>';});
+    document.getElementById('dbtable').innerHTML=h+'</tbody>';
+  }
+  document.querySelectorAll('#tabs button').forEach(function(b){b.onclick=function(){
+    document.querySelectorAll('#tabs button').forEach(function(o){o.setAttribute('aria-pressed',o===b);});drawTable(b.dataset.t);};});
+  document.getElementById('run').onclick=function(){toast(t('ran'));};
+  drawTable('logs');
+
+  /* wizard */
+  var step=0;
+  function drawWiz(){
+    var w=document.getElementById('wiz'),h='';
+    if(step===0)h='<div class="field"><label for="p">'+t('p_l')+'</label><input id="p" value="8080" inputmode="numeric"><span class="hint">'+t('p_h')+'</span></div>';
+    if(step===1)h='<div class="field"><label for="f">'+t('f_l')+'</label><input id="f" value="C:\\SERVERS\\SBserv"><span class="hint">'+t('f_h')+'</span></div>';
+    if(step===2)h='<div class="field"><label for="d">'+t('d_l')+'</label><select id="d"><option>'+t('d_o')+'</option></select><span class="hint">'+t('d_h')+'</span></div>';
+    w.innerHTML=h;
+    document.querySelectorAll('#steps li').forEach(function(li,i){li.className=i<step?'done':(i===step?'cur':'');});
+    document.getElementById('back').style.visibility=step?'visible':'hidden';
+    document.getElementById('next').textContent=step===2?t('finish'):t('next');
+  }
+  document.getElementById('back').onclick=function(){if(step>0){step--;drawWiz();}};
+  document.getElementById('next').onclick=function(){
+    if(step<2){step++;drawWiz();}else{toast(t('ready')+'8080');step=0;drawWiz();}
+  };
+  applyLang(L);
+})();
+</script>
+</body>
+</html>

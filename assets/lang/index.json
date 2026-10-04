@@ -1,0 +1,12 @@
+{
+  "languages": [
+    {
+      "code": "en",
+      "file": "en.json"
+    },
+    {
+      "code": "nl",
+      "file": "nl.json"
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+# build output
+build/
+dist/
+*.spec
+Output/
+SBserv_Setup_*.exe
+cloudflared.exe
+# python
+__pycache__/
+*.pyc
+# runtime data (per gebruiker)
+database.db
+database.db-wal
+database.db-shm
+config.json
+/bin/
+/public_html/
+/lang/
+*.part
+*.bak
