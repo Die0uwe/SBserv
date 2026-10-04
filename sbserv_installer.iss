@@ -64,7 +64,7 @@ Source: "dist\sbserv.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "sbserv.py"; DestDir: "{app}"; Flags: ignoreversion
 #endif
 ; Logo, favicon, installerplaatjes en vertalingen (assets\lang\*.json) - bewerkbaar zonder opnieuw te bouwen
-Source: "assets\*"; DestDir: "{app}\assets"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "assets\*"; DestDir: "{app}\assets"; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: "source\*,*.bmp"
 ; Voorbeeldsite: alleen plaatsen als gebruiker nog niets heeft (nooit eigen werk overschrijven)
 Source: "public_html\*"; DestDir: "{app}\public_html"; Flags: onlyifdoesntexist recursesubdirs createallsubdirs skipifsourcedoesntexist
 ; cloudflared meeleveren als hij naast dit script ligt (build.bat haalt hem op).

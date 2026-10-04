@@ -53,9 +53,11 @@ Strings live in `assets/lang/<code>.json` (copy `en.json`, translate the values,
 sbserv.py               the application / de applicatie
 sbserv_installer.iss    Inno Setup script
 build.bat               exe + installer build
-assets/                 logo, favicon, installer images, start page, lang/*.json
+assets/                 logo, favicon, installer images, start page, dashboard, lang/*.json
+assets/source/          original logo (source of all icons) / originele logo (bron van alle iconen)
+tools/make_images.py    regenerates logo, favicon and installer images from the original / maakt alle afbeeldingen opnieuw
 assets/dashboard.html   the dashboard UI / de dashboard-interface
-examples/mockup.html    original design mockup / oorspronkelijke ontwerp-mockup
+examples/mockup.html    design mockup, single self-contained file / ontwerp-mockup, één zelfstandig bestand
 tests/                  python -m unittest discover -s tests -v
 ```
 
