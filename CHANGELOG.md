@@ -4,6 +4,7 @@
 First release of SBserv (grown out of the earlier "play_assistant" prototype).
 
 ### Added
+- Dashboard: separate local admin server with API + resizable app window (status, tunnel start/stop with clear errors, website files, read-only database view, settings: port/language/text size). Protected by a per-session token and Host check; not reachable through the tunnel.
 - Local web server (127.0.0.1, threaded, automatic free-port fallback, clean restart on port change).
 - SQLite database with WAL and event log.
 - Cloudflare Quick Tunnel: bundled or auto-downloaded and validated `cloudflared`, internet check, 40 s timeout, stop option, clean shutdown, link copied to clipboard.

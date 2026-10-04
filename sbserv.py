@@ -17,11 +17,13 @@ Cloudflare Quick Tunnel.
   een schrijfbare map (valt terug op %LOCALAPPDATA%\\SBserv).
 """
 
+import hmac
 import http.server
 import json
 import locale
 import os
 import re
+import secrets
 import shutil
 import socket
 import socketserver
@@ -37,6 +39,7 @@ import webbrowser
 APP_NAME = "SBserv"
 APP_VERSION = "1.0"
 DEFAULT_PORT = 8080
+DEFAULT_ADMIN_PORT = 8081  # dashboard; alleen 127.0.0.1, wordt NOOIT door de tunnel gedeeld
 HOST = "127.0.0.1"
 DIRECTORY = "public_html"
 DB_NAME = "database.db"
@@ -526,19 +529,41 @@ class Tunnel:
     def __init__(self):
         self.proc = None
         self.url = None
+        self.error = None      # "no_internet" | "cf_download" | "timeout" | "start" | None
+        self.starting = False
+        self._cancel = False
         self._lock = threading.Lock()
+        self._start_lock = threading.Lock()
 
     def is_running(self):
         return self.proc is not None and self.proc.poll() is None
 
     def start(self, port):
+        """Start de tunnel. Geeft de publieke URL of None (reden in self.error)."""
         if self.is_running():
             return self.url
-        cf = ensure_cloudflared()
-        if not cf:
-            return None
+        if not self._start_lock.acquire(blocking=False):
+            return None  # er wordt al gestart
+        self.starting = True
+        self.error = None
+        try:
+            return self._start(port)
+        finally:
+            self.starting = False
+            self._start_lock.release()
+
+    def _start(self, port):
+        self._cancel = False
         if not has_internet():
             print(t("no_internet"))
+            self.error = "no_internet"
+            return None
+        cf = find_cloudflared()
+        if not cf:
+            print(t("cf_missing"))
+            cf = download_cloudflared()
+        if not cf:
+            self.error = "cf_download"
             return None
 
         print(t("tunnel_starting"))
@@ -552,13 +577,15 @@ class Tunnel:
         except OSError as e:
             print(t("tunnel_cf_start_failed", err=e))
             self.proc = None
+            self.error = "start"
             return None
 
         self.url = None
         found = threading.Event()
+        proc = self.proc
 
         def reader():
-            for line in self.proc.stdout:  # blijft draaien zodat de pipe niet vol loopt
+            for line in proc.stdout:  # blijft draaien zodat de pipe niet vol loopt
                 if not self.url:
                     m = TUNNEL_URL_RE.search(line)
                     if m:
@@ -569,12 +596,15 @@ class Tunnel:
 
         deadline = time.time() + TUNNEL_TIMEOUT
         while time.time() < deadline and not found.is_set():
-            if self.proc.poll() is not None:
+            if proc.poll() is not None:
                 break
             time.sleep(0.2)
 
+        if self._cancel:  # gebruiker stopte tijdens het opstarten: geen foutmelding
+            return None
         if not self.url:
             print(t("tunnel_timeout"))
+            self.error = "timeout"
             self.stop()
             return None
 
@@ -582,6 +612,7 @@ class Tunnel:
         return self.url
 
     def stop(self):
+        self._cancel = True
         with self._lock:
             if self.proc and self.proc.poll() is None:
                 self.proc.terminate()
@@ -602,6 +633,305 @@ def copy_to_clipboard(text):
         return True
     except (OSError, subprocess.SubprocessError):
         return False
+
+
+# ----------------------------------------------------------------------------
+# Dashboard (aparte admin-server, alleen lokaal)
+# ----------------------------------------------------------------------------
+class Ctx:
+    """Gedeelde toestand tussen console-menu en dashboard."""
+
+    def __init__(self):
+        self.server = WebServer()
+        self.tunnel = Tunnel()
+        self.cfg = {}
+        self.started = time.time()
+        self.admin = None
+
+
+CTX = Ctx()
+UI_SIZES = ("s", "m", "l")
+
+
+def db_info():
+    info = {"online": check_db_status(), "name": DB_NAME, "size": 0, "tables": 0}
+    try:
+        info["size"] = os.path.getsize(DB_PATH)
+        with db_connect() as conn:
+            info["tables"] = conn.execute(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
+            ).fetchone()[0]
+    except (OSError, sqlite3.Error):
+        pass
+    return info
+
+
+def db_tables():
+    with db_connect() as conn:
+        return [r[0] for r in conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name")]
+
+
+def db_rows(table, limit=50):
+    """Alleen-lezen: tabelnaam moet in sqlite_master staan (geen SQL-injectie)."""
+    if table not in db_tables():
+        return None
+    ident = '"' + table.replace('"', '""') + '"'
+    with db_connect() as conn:
+        try:
+            cur = conn.execute(f"SELECT * FROM {ident} ORDER BY rowid DESC LIMIT ?", (limit,))
+        except sqlite3.Error:
+            cur = conn.execute(f"SELECT * FROM {ident} LIMIT ?", (limit,))
+        cols = [d[0] for d in cur.description]
+        rows = [["<blob>" if isinstance(v, (bytes, bytearray)) else v for v in r] for r in cur.fetchall()]
+    return {"columns": cols, "rows": rows}
+
+
+def list_site_files():
+    out = []
+    try:
+        for name in sorted(os.listdir(WEB_ROOT), key=str.lower):
+            p = os.path.join(WEB_ROOT, name)
+            if os.path.isdir(p):
+                out.append({"name": name, "dir": True, "size": len(os.listdir(p))})
+            else:
+                out.append({"name": name, "dir": False, "size": os.path.getsize(p)})
+    except OSError:
+        pass
+    return out
+
+
+def tunnel_state():
+    tun = CTX.tunnel
+    if tun.is_running() and tun.url:
+        state = "live"
+    elif tun.starting:
+        state = "starting"
+    else:
+        state = "off"
+    return {"state": state, "url": tun.url if state == "live" else None,
+            "error": tun.error if state == "off" else None}
+
+
+def status_dict():
+    cfg = CTX.cfg
+    return {
+        "version": APP_VERSION,
+        "uptime": int(time.time() - CTX.started),
+        "language": t.code,
+        "languages": t.available(),
+        "ui_size": cfg.get("ui_size", "m"),
+        "open_dashboard": cfg.get("open_dashboard", True),
+        "web": {"online": CTX.server.is_running(), "port": CTX.server.port,
+                "url": f"http://localhost:{CTX.server.port}"},
+        "db": db_info(),
+        "tunnel": tunnel_state(),
+        "data_dir": DATA_DIR,
+    }
+
+
+def tunnel_start_async():
+    tun = CTX.tunnel
+    if tun.starting or tun.is_running():
+        return
+    tun.starting = True  # direct zichtbaar in de volgende status-poll
+    tun.error = None
+
+    def run():
+        tun.starting = False  # Tunnel.start zet het zelf opnieuw onder zijn lock
+        tun.start(CTX.server.port)
+
+    threading.Thread(target=run, daemon=True).start()
+
+
+def apply_settings(data):
+    """Valideer en pas dashboard-instellingen toe. Geeft (ok, foutcode)."""
+    cfg = CTX.cfg
+    if "language" in data:
+        if data["language"] not in t.available():
+            return False, "language"
+        t.set(data["language"])
+        cfg["language"] = t.code
+    if "ui_size" in data:
+        if data["ui_size"] not in UI_SIZES:
+            return False, "ui_size"
+        cfg["ui_size"] = data["ui_size"]
+    if "open_dashboard" in data:
+        cfg["open_dashboard"] = bool(data["open_dashboard"])
+    if "port" in data:
+        try:
+            port = int(data["port"])
+        except (TypeError, ValueError):
+            return False, "port"
+        if not 1024 <= port <= 65535 or (CTX.admin and port == CTX.admin.port):
+            return False, "port"
+        if port != CTX.server.port:
+            CTX.tunnel.stop()  # tunnel wijst anders naar de oude poort
+            if not start_server_with_fallback(CTX.server, port):
+                return False, "port"
+            cfg["port"] = CTX.server.port
+    save_config(cfg)
+    return True, None
+
+
+class _AdminHandler(http.server.BaseHTTPRequestHandler):
+    server_version = "SBserv"
+
+    def log_message(self, format, *args):
+        return
+
+    # -- helpers
+    def _send(self, code, body, ctype="application/json; charset=utf-8"):
+        if isinstance(body, str):
+            body = body.encode("utf-8")
+        self.send_response(code)
+        self.send_header("Content-Type", ctype)
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("Referrer-Policy", "no-referrer")
+        self.send_header("Content-Security-Policy",
+                         "default-src 'self'; script-src 'self' 'unsafe-inline'; "
+                         "style-src 'self' 'unsafe-inline'; img-src 'self' data:; frame-ancestors 'none'")
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _json(self, obj, code=200):
+        self._send(code, json.dumps(obj, ensure_ascii=False))
+
+    def _host_ok(self):
+        """Tegen DNS-rebinding: alleen localhost/127.0.0.1 op onze eigen poort."""
+        port = self.server.server_address[1]
+        return (self.headers.get("Host") or "").lower() in (f"127.0.0.1:{port}", f"localhost:{port}")
+
+    def _token_ok(self):
+        return hmac.compare_digest(self.headers.get("X-SBserv-Token") or "", self.server.token)
+
+    def _body(self):
+        try:
+            n = int(self.headers.get("Content-Length") or 0)
+            if 0 < n <= 8192:
+                data = json.loads(self.rfile.read(n).decode("utf-8"))
+                return data if isinstance(data, dict) else {}
+        except (ValueError, OSError):
+            pass
+        return {}
+
+    # -- routes
+    def do_GET(self):
+        if not self._host_ok():
+            return self._send(403, "forbidden", "text/plain")
+        path = self.path.split("?", 1)[0]
+        query = self.path.split("?", 1)[1] if "?" in self.path else ""
+        if path in ("/", "/index.html"):
+            src = resource_path("dashboard.html")
+            if not src:
+                return self._send(500, "dashboard.html missing", "text/plain")
+            with open(src, "r", encoding="utf-8") as f:
+                html = f.read().replace("__TOKEN__", self.server.token)
+            return self._send(200, html, "text/html; charset=utf-8")
+        if path in ("/logo_512.png", "/favicon.ico"):
+            src = resource_path(path[1:])
+            if not src:
+                return self._send(404, "not found", "text/plain")
+            with open(src, "rb") as f:
+                return self._send(200, f.read(), "image/png" if path.endswith("png") else "image/x-icon")
+        if not path.startswith("/api/") or not self._token_ok():
+            return self._send(403, "forbidden", "text/plain")
+
+        try:
+            if path == "/api/status":
+                return self._json(status_dict())
+            if path == "/api/strings":
+                d = dict(t.base)
+                d.update(t.cur)
+                d.pop("_meta", None)
+                return self._json(d)
+            if path == "/api/logs":
+                with db_connect() as conn:
+                    rows = conn.execute("SELECT id, message, timestamp FROM logs ORDER BY id DESC LIMIT 8").fetchall()
+                return self._json([{"id": r[0], "message": r[1], "at": r[2]} for r in rows])
+            if path == "/api/files":
+                return self._json(list_site_files())
+            if path == "/api/db":
+                return self._json(db_tables())
+            if path.startswith("/api/db/"):
+                from urllib.parse import unquote
+                res = db_rows(unquote(path[len("/api/db/"):]))
+                return self._json(res) if res else self._json({"error": "not_found"}, 404)
+        except sqlite3.Error as e:
+            return self._json({"error": str(e)}, 500)
+        return self._json({"error": "not_found"}, 404)
+
+    def do_POST(self):
+        if not self._host_ok() or not self._token_ok():
+            return self._send(403, "forbidden", "text/plain")
+        path = self.path.split("?", 1)[0]
+        if path == "/api/tunnel/start":
+            tunnel_start_async()
+            return self._json({"ok": True})
+        if path == "/api/tunnel/stop":
+            CTX.tunnel.stop()
+            return self._json({"ok": True})
+        if path == "/api/settings":
+            ok, err = apply_settings(self._body())
+            return self._json({"ok": ok, "error": err}, 200 if ok else 400)
+        if path == "/api/open-folder":
+            if os.name == "nt":
+                try:
+                    os.startfile(WEB_ROOT)  # noqa: S606 (vast pad, geen gebruikersinvoer)
+                except OSError:
+                    pass
+            return self._json({"ok": True})
+        return self._json({"error": "not_found"}, 404)
+
+
+class AdminServer:
+    def __init__(self):
+        self.httpd = None
+        self.port = None
+        self.token = secrets.token_urlsafe(24)  # per start nieuw; zit alleen in de eigen dashboard-pagina
+
+    def start(self, preferred):
+        port = find_free_port(preferred)
+        if port is None:
+            return False
+        self.httpd = _Server((HOST, port), _AdminHandler)
+        self.httpd.token = self.token
+        self.port = port
+        threading.Thread(target=self.httpd.serve_forever, daemon=True).start()
+        return True
+
+    def stop(self):
+        if self.httpd:
+            try:
+                self.httpd.shutdown()
+                self.httpd.server_close()
+            except OSError:
+                pass
+        self.httpd = None
+
+    @property
+    def url(self):
+        return f"http://127.0.0.1:{self.port}/"
+
+
+def open_app_window(url):
+    """Open het dashboard als eigen (verschaalbaar) app-venster via Edge/Chrome; anders gewone browser."""
+    if os.name == "nt":
+        roots = [os.environ.get(k) for k in ("ProgramFiles(x86)", "ProgramFiles", "LOCALAPPDATA")]
+        rel = [r"Microsoft\Edge\Application\msedge.exe", r"Google\Chrome\Application\chrome.exe"]
+        for r in rel:
+            for root in filter(None, roots):
+                exe = os.path.join(root, r)
+                if os.path.isfile(exe):
+                    try:
+                        subprocess.Popen([exe, f"--app={url}", "--window-size=1180,760"],
+                                         creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+                        return
+                    except OSError:
+                        pass
+    webbrowser.open(url)
 
 
 # ----------------------------------------------------------------------------
@@ -672,14 +1002,13 @@ def main():
             pass
 
     setup_environment()
-    cfg = load_config()
+    cfg = CTX.cfg = load_config()
     t.set(pick_initial_language(cfg))
     if cfg.get("language") != t.code and "--lang" in sys.argv:
         cfg["language"] = t.code  # installer-keuze onthouden
         save_config(cfg)
 
-    server = WebServer()
-    tunnel = Tunnel()
+    server, tunnel = CTX.server, CTX.tunnel
 
     clear()
     line = "=" * 50
@@ -692,6 +1021,12 @@ def main():
         return
     cfg["port"] = server.port
     save_config(cfg)
+
+    CTX.admin = AdminServer()
+    if not CTX.admin.start(cfg.get("admin_port", DEFAULT_ADMIN_PORT)):
+        CTX.admin = None
+    elif cfg.get("open_dashboard", True) and "--no-browser" not in sys.argv:
+        open_app_window(CTX.admin.url)
 
     try:
         while True:
@@ -710,14 +1045,18 @@ def main():
             print(f" {t('s_tunnel')}: {tun_status}")
             print(f" {t('s_folder')}: {WEB_ROOT}")
             print(f" {t('s_url')}: http://localhost:{server.port}")
+            if CTX.admin:
+                print(f" {t('s_dash')}: {CTX.admin.url}")
             print("-" * 50)
-            for k in ("m1", "m2", "m3", "m4", "m5", "m6", "m7", "m8"):
+            for k in ("m1", "m2", "m3", "m4", "m5", "m6", "m7", "m8", "m_dash"):
                 print(" " + t(k))
             print(line)
 
-            keuze = input(t("choose")).strip()
+            keuze = input(t("choose")).strip().lower()
 
-            if keuze == "1":
+            if keuze == "d" and CTX.admin:
+                open_app_window(CTX.admin.url)
+            elif keuze == "1":
                 webbrowser.open(f"http://localhost:{server.port}")
                 pause()
             elif keuze == "2":
@@ -769,6 +1108,8 @@ def main():
         print("\n" + t("closing"))
         tunnel.stop()
         server.stop()
+        if CTX.admin:
+            CTX.admin.stop()
         db_log("SBserv closed.")
 
 
