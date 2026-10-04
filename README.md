@@ -32,9 +32,15 @@ Dashboard: opens automatically (`--no-browser` to skip) or press `D` in the menu
 
 Menu: `[1]` open site · `[2]` files · `[3]` public tunnel · `[4]` database logs · `[5]` change port · `[6]` stop tunnel · `[7]` language · `[8]` exit.
 
+## Get the latest version / De nieuwste versie ophalen
+
+Download the newest ZIP: https://github.com/Die0uwe/SBserv/archive/refs/heads/main.zip
+De nieuwste ZIP downloaden: zie link hierboven.
+
 ## Build the installer / Installer bouwen
 
-Requirements / Vereist: Windows, Python 3, [Inno Setup 6](https://jrsoftware.org/isinfo.php).
+**Option A - on your PC / Optie A - op je eigen pc.** Requirements / Vereist: Windows, Python 3 (tick "Add to PATH"), [Inno Setup 6](https://jrsoftware.org/isinfo.php).
+Unzip, then double-click / Uitpakken en dubbelklikken op:
 
 ```bat
 build.bat
@@ -42,6 +48,8 @@ build.bat
 
 This (1) installs PyInstaller, (2) builds `dist\sbserv.exe` with the logo as icon, (3) fetches `cloudflared.exe`, (4) compiles `sbserv_installer.iss` into `SBserv_Setup_v1.0.exe`.
 Without `build.bat` the `.iss` falls back to `sbserv.py` (then Python must be installed on the PC).
+
+**Option B - nothing to install / Optie B - niets installeren.** GitHub builds it for you: *Actions > Build installer > Run workflow*, then download the `SBserv-installer` artifact. Pushing a tag like `v1.0.0` also publishes it as a Release.
 
 ## Translations / Vertalingen
 

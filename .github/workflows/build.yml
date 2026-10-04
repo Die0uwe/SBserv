@@ -1,0 +1,50 @@
+name: Build installer
+
+# Handmatig starten: GitHub > Actions > "Build installer" > Run workflow.
+# Of een tag pushen (bijv. v1.0.0): dan komt de installer ook als Release online.
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Tests
+        run: python -W ignore -m unittest discover -s tests
+        continue-on-error: true
+
+      - name: Build sbserv.exe
+        run: |
+          python -m pip install --upgrade pip pyinstaller
+          python -m PyInstaller --onefile --console --name sbserv --icon assets\favicon.ico --add-data "assets;assets" --clean sbserv.py
+
+      - name: Get cloudflared
+        run: curl.exe -L --fail -o cloudflared.exe https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.exe
+
+      - name: Install Inno Setup
+        run: choco install innosetup -y --no-progress
+
+      - name: Build installer
+        run: '& "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" sbserv_installer.iss'
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SBserv-installer
+          path: SBserv_Setup_v*.exe
+
+      - name: Release (alleen bij tag)
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: SBserv_Setup_v*.exe
