@@ -49,6 +49,8 @@ build.bat
 This (1) installs PyInstaller, (2) builds `dist\sbserv.exe` with the logo as icon, (3) fetches `cloudflared.exe`, (4) compiles `sbserv_installer.iss` into `SBserv_Setup_v1.0.exe`.
 Without `build.bat` the `.iss` falls back to `sbserv.py` (then Python must be installed on the PC).
 
+**Already have `sbserv.exe`? / Heb je al een `sbserv.exe`?** Put it next to `sbserv_installer.iss` (or in `dist\`), open the `.iss` in Inno Setup and press Ctrl+F9, or double-click `installer.bat`. / Zet hem naast `sbserv_installer.iss` (of in `dist\`), open de `.iss` in Inno Setup en druk Ctrl+F9, of dubbelklik `installer.bat`.
+
 **Option B - nothing to install / Optie B - niets installeren.** GitHub builds it for you: *Actions > Build installer > Run workflow*, then download the `SBserv-installer` artifact. Pushing a tag like `v1.0.0` also publishes it as a Release.
 
 ## Translations / Vertalingen

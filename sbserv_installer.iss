@@ -1,8 +1,13 @@
 ; SBserv Installer Script
-; Gemaakt voor Inno Setup 6.x
-; Bouwen: eerst build.bat draaien (maakt sbserv.exe + haalt cloudflared.exe op),
-; daarna dit script compileren in Inno Setup.
-; Zonder build.bat valt het terug op sbserv.py (dan is Python op de pc nodig).
+; Gemaakt voor Inno Setup 6.3 of nieuwer
+;
+; Zo gebruik je het (heb je al een sbserv.exe?):
+;   1. Zet sbserv.exe naast dit bestand (of in de submap dist\).
+;   2. Open dit bestand in Inno Setup en kies Build > Compile (Ctrl+F9),
+;      of dubbelklik op installer.bat.
+;   3. Klaar: SBserv_Setup_v1.0.exe staat naast dit bestand.
+; Zonder sbserv.exe valt het terug op sbserv.py (dan is Python op de pc nodig).
+; Optioneel: cloudflared.exe naast dit bestand wordt meegeleverd.
 
 #define MyAppName "SBserv"
 #define MyAppVersion "1.0"
@@ -11,6 +16,14 @@
 
 #ifexist "dist\sbserv.exe"
   #define UseExe
+  #define ExeSrc "dist\sbserv.exe"
+#else
+  #ifexist "sbserv.exe"
+    #define UseExe
+    #define ExeSrc "sbserv.exe"
+  #endif
+#endif
+#ifdef UseExe
   #define MyAppExeName "sbserv.exe"
 #else
   #define MyAppExeName "sbserv.py"
@@ -36,9 +49,14 @@ ArchitecturesInstallIn64BitMode=x64compatible
 ; Sluit een draaiende versie af zodat updaten niet faalt op vergrendelde bestanden
 CloseApplications=yes
 UninstallDisplayName={#MyAppName}
+AppCopyright=Copyright (C) Scriptspace
+VersionInfoVersion={#MyAppVersion}.0.0
+VersionInfoCompany={#MyAppPublisher}
+VersionInfoProductName={#MyAppName}
+VersionInfoDescription={#MyAppName} Setup
 ; Logo & afbeeldingen (uit assets\): app-icoon, grote zijbalk en klein kopplaatje, meerdere DPI-formaten
 SetupIconFile=assets\favicon.ico
-UninstallDisplayIcon={app}\{#MyAppExeName}
+UninstallDisplayIcon={app}\assets\favicon.ico
 WizardImageFile=assets\wizard_164x314.bmp,assets\wizard_246x459.bmp
 WizardSmallImageFile=assets\wizard_small_55.bmp,assets\wizard_small_83.bmp,assets\wizard_small_110.bmp
 ; Taalkeuze tonen bij start van de installer (Engels / Nederlands)
@@ -59,7 +77,7 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 
 [Files]
 #ifdef UseExe
-Source: "dist\sbserv.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#ExeSrc}"; DestDir: "{app}"; Flags: ignoreversion
 #else
 Source: "sbserv.py"; DestDir: "{app}"; Flags: ignoreversion
 #endif
@@ -77,11 +95,11 @@ Name: "{app}"; Permissions: users-modify
 
 [Icons]
 #ifdef UseExe
-Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\sbserv.exe"; WorkingDir: "{app}"
-Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\sbserv.exe"; WorkingDir: "{app}"; Tasks: desktopicon
+Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\sbserv.exe"; WorkingDir: "{app}"; IconFilename: "{app}\assets\favicon.ico"
+Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\sbserv.exe"; WorkingDir: "{app}"; IconFilename: "{app}\assets\favicon.ico"; Tasks: desktopicon
 #else
-Name: "{autoprograms}\{#MyAppName}"; Filename: "python.exe"; Parameters: """{app}\sbserv.py"""; WorkingDir: "{app}"
-Name: "{autodesktop}\{#MyAppName}"; Filename: "python.exe"; Parameters: """{app}\sbserv.py"""; WorkingDir: "{app}"; Tasks: desktopicon
+Name: "{autoprograms}\{#MyAppName}"; Filename: "python.exe"; Parameters: """{app}\sbserv.py"""; WorkingDir: "{app}"; IconFilename: "{app}\assets\favicon.ico"
+Name: "{autodesktop}\{#MyAppName}"; Filename: "python.exe"; Parameters: """{app}\sbserv.py"""; WorkingDir: "{app}"; IconFilename: "{app}\assets\favicon.ico"; Tasks: desktopicon
 #endif
 
 [Run]
