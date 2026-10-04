@@ -4,6 +4,8 @@
 First release of SBserv (grown out of the earlier "play_assistant" prototype).
 
 ### Added
+- Installer script accepts an existing `sbserv.exe` (next to the `.iss` or in `dist\`), logo on all shortcuts, version info; `installer.bat` builds only the installer; GitHub Actions workflow builds exe + installer on Windows.
+- Verified on Windows: PyInstaller exe runs, port change works, tunnel link created (using an existing `cloudflared`). Auto-download still to be tested on a PC without it.
 - Original logo kept in `assets/source/`; `tools/make_images.py` regenerates logo, favicon (multi-size .ico) and installer images. Mockup is now one self-contained file (logo and favicon embedded).
 - Dashboard: separate local admin server with API + resizable app window (status, tunnel start/stop with clear errors, website files, read-only database view, settings: port/language/text size). Protected by a per-session token and Host check; not reachable through the tunnel.
 - Local web server (127.0.0.1, threaded, automatic free-port fallback, clean restart on port change).

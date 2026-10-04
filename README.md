@@ -9,6 +9,15 @@ SBserv is a portable web server for Windows with a built-in SQLite database, an 
 
 SBserv is een draagbare webserver voor Windows met ingebouwde SQLite-database, een automatische startpagina en een optionele publieke link (Cloudflare Quick Tunnel). Engels en Nederlands zijn ingebouwd; meer talen komen via een vertaal-repository.
 
+## Status / Stand van zaken (v1.0)
+
+| | EN | NL |
+|---|---|---|
+| Works on Windows | `sbserv.exe` (PyInstaller) starts, serves the site, keeps its SQLite database, and a Cloudflare Quick Tunnel link was created (with a `cloudflared` already present on the PC) | `sbserv.exe` (PyInstaller) start, toont de site, bewaart de SQLite-database en een Cloudflare Quick Tunnel-link is aangemaakt (met een `cloudflared` die al op de pc stond) |
+| Installer | `SBserv_Setup_v1.0.exe` built with Inno Setup | `SBserv_Setup_v1.0.exe` gebouwd met Inno Setup |
+| Still to test | Automatic `cloudflared` download on a PC without it, installer in both languages on a clean PC, dashboard window on Windows, GitHub Actions build | Automatische `cloudflared`-download op een pc zonder, installer in beide talen op een schone pc, dashboard-venster op Windows, GitHub Actions-build |
+| Planned | `users` table with hashed passwords + login API + user management in the dashboard (stays on SQLite); translation repository | `users`-tabel met versleutelde wachtwoorden + inlog-API + gebruikersbeheer in het dashboard (blijft SQLite); vertaal-repository |
+
 ## Features / Functies
 
 | | EN | NL |
@@ -31,6 +40,14 @@ python sbserv.py --lang nl  # force a language / taal forceren
 Dashboard: opens automatically (`--no-browser` to skip) or press `D` in the menu / opent automatisch (`--no-browser` om over te slaan) of druk `D` in het menu.
 
 Menu: `[1]` open site · `[2]` files · `[3]` public tunnel · `[4]` database logs · `[5]` change port · `[6]` stop tunnel · `[7]` language · `[8]` exit.
+
+## How the tunnel works / Hoe de tunnel werkt
+
+EN: `cloudflared` opens an **outgoing** connection to Cloudflare and your local site (`127.0.0.1`) hangs behind a random `*.trycloudflare.com` link. No router ports, no account, no inbound firewall rule; outbound port 7844 must be allowed. Quick Tunnels are meant for testing: no uptime guarantee, max. 200 simultaneous requests, no server-sent events, and the link changes on every start. Your PC and SBserv must stay running. For a fixed address you need a Cloudflare account and your own domain (planned as an option).
+
+NL: `cloudflared` maakt een **uitgaande** verbinding naar Cloudflare en je lokale site (`127.0.0.1`) hangt achter een willekeurige `*.trycloudflare.com`-link. Geen router-poorten, geen account, geen inkomende firewallregel; uitgaand poort 7844 moet open staan. Quick Tunnels zijn bedoeld om te testen: geen uptimegarantie, maximaal 200 gelijktijdige verzoeken, geen server-sent events en de link verandert bij elke start. Je pc en SBserv moeten blijven draaien. Voor een vast adres heb je een Cloudflare-account en een eigen domein nodig (gepland als optie).
+
+Sources / Bronnen: [Quick Tunnels](https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/do-more-with-tunnels/trycloudflare/), [Tunnel firewall](https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/configure-tunnels/tunnel-with-firewall/)
 
 ## Get the latest version / De nieuwste versie ophalen
 
@@ -61,15 +78,24 @@ Strings live in `assets/lang/<code>.json` (copy `en.json`, translate the values,
 
 ```text
 sbserv.py               the application / de applicatie
-sbserv_installer.iss    Inno Setup script
-build.bat               exe + installer build
-assets/                 logo, favicon, installer images, start page, dashboard, lang/*.json
+sbserv_installer.iss    Inno Setup script (logo, EN/NL, shortcuts) / Inno Setup-script
+build.bat               exe + cloudflared + installer in one go / alles in één keer
+installer.bat           installer only, from an existing sbserv.exe / alleen de installer
+assets/                 logo, favicon, installer images, start page, dashboard.html, lang/*.json
 assets/source/          original logo (source of all icons) / originele logo (bron van alle iconen)
-tools/make_images.py    regenerates logo, favicon and installer images from the original / maakt alle afbeeldingen opnieuw
-assets/dashboard.html   the dashboard UI / de dashboard-interface
-examples/mockup.html    design mockup, single self-contained file / ontwerp-mockup, één zelfstandig bestand
+tools/make_images.py    regenerates logo, favicon and installer images / maakt alle afbeeldingen opnieuw
+examples/mockup.html    design mockup, single self-contained file / ontwerp-mockup
 tests/                  python -m unittest discover -s tests -v
+.github/workflows/      build.yml - Windows build of exe + installer on GitHub
 ```
+
+Build output is **not** in Git / Bouwresultaten staan **niet** in Git: `dist/`, `build/`, `*.spec`, `cloudflared.exe`, `SBserv_Setup_*.exe`, `*.zip`.
+
+## Working from the folder / Werken vanuit de map
+
+EN: the project folder on the PC (`C:\SERVERS\DIEOUWE-AI\SBwebserv`) is the working copy; GitHub (`Die0uwe/SBserv`, branch `main`) is kept identical for all tracked files. Run `python -m unittest discover -s tests` before pushing.
+
+NL: de projectmap op de pc (`C:\SERVERS\DIEOUWE-AI\SBwebserv`) is de werkkopie; GitHub (`Die0uwe/SBserv`, branch `main`) wordt voor alle bijgehouden bestanden gelijk gehouden. Draai `python -m unittest discover -s tests` voor het pushen.
 
 ## Security notes / Beveiliging
 
